@@ -143,7 +143,7 @@ export function MetadataView() {
 
             {/* Objects List */}
             <div className="space-y-4">
-              {dlmObjects?.length > 0 && (
+              {dlmObjects && dlmObjects.length > 0 && (
                 <div className="card">
                   <div className="p-4 border-b border-sf-navy-100 bg-purple-50">
                     <h2 className="font-medium text-purple-900 flex items-center gap-2">
@@ -164,7 +164,7 @@ export function MetadataView() {
                 </div>
               )}
 
-              {otherObjects?.length > 0 && (
+              {otherObjects && otherObjects.length > 0 && (
                 <div className="card">
                   <div className="p-4 border-b border-sf-navy-100 bg-sf-navy-50">
                     <h2 className="font-medium text-sf-navy-900 flex items-center gap-2">
