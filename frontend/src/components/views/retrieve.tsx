@@ -216,7 +216,7 @@ function extractTables(rawData: any): TableData[] {
   // Add all found tables
   for (const [name, rows] of foundTables.entries()) {
     if (rows.length > 0) {
-      const columns = [...new Set(rows.flatMap(row => Object.keys(row)))]
+      const columns = [...new Set(rows.flatMap((row: Record<string, any>) => Object.keys(row)))]
       tables.push({
         name: formatTableName(name),
         columns,
