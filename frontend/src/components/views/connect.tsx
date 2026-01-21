@@ -526,6 +526,7 @@ export function ConnectView() {
                       <li>
                         <strong>Callback URL:</strong>{' '}
                         <code className="bg-sf-navy-100 px-1 rounded">{callbackUrl}</code>
+                        <p className="text-xs text-sf-navy-400 mt-1">It can take up to 10 minutes for saved changes to be effective.</p>
                       </li>
                       <li><strong>OAuth Scopes:</strong> api, refresh_token, cdp_ingest_api, cdp_profile_api</li>
                       <li><strong>PKCE:</strong> Enabled</li>
