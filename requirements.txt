@@ -1,0 +1,5 @@
+# Include backend requirements
+-r backend/requirements.txt
+
+# Production server
+gunicorn>=21.0.0
