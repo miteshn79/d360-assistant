@@ -219,3 +219,52 @@ export const configApi = {
 export const healthApi = {
   check: () => fetchApi<{ status: string; timestamp: string; redis?: string }>('/api/health'),
 }
+
+// Website Builder API
+export interface WebsiteProject {
+  customer_name: string
+  country: string
+  industry: string
+  use_case: string
+  branding_assets?: { type: string; name: string; value: string }[]
+  llm_provider?: string
+  llm_api_key?: string
+  heroku_api_key?: string
+  use_default_heroku?: boolean
+}
+
+export interface WebsiteBuilderChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export const websiteBuilderApi = {
+  chat: (data: { messages: WebsiteBuilderChatMessage[]; project_context?: Record<string, any> }) =>
+    fetchApi<{ response: string; project_updates?: Record<string, any> }>(
+      '/api/website-builder/chat',
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  generate: (project: WebsiteProject) =>
+    fetchApi<{
+      success: boolean
+      website?: { files: { path: string; content: string }[]; instructions: string }
+      error?: string
+      project?: { customer_name: string; country: string; industry: string }
+    }>('/api/website-builder/generate', {
+      method: 'POST',
+      body: JSON.stringify(project),
+    }),
+
+  deploy: (data: { website_data: any; app_name: string; heroku_api_key?: string }) =>
+    fetchApi<{
+      success: boolean
+      message: string
+      app_url: string
+      files: { path: string; content: string }[]
+      instructions: string[]
+    }>(`/api/website-builder/deploy?app_name=${encodeURIComponent(data.app_name)}${data.heroku_api_key ? `&heroku_api_key=${encodeURIComponent(data.heroku_api_key)}` : ''}`, {
+      method: 'POST',
+      body: JSON.stringify(data.website_data),
+    }),
+}

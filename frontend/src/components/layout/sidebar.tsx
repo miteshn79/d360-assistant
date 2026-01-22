@@ -8,6 +8,7 @@ import {
   Cloud,
   Database,
   FileJson,
+  Globe,
   Home,
   MessageSquare,
   Search,
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { id: 'home', label: 'Home', icon: <Home className="w-5 h-5" />, href: '/' },
   { id: 'configs', label: 'Saved Configs', icon: <Settings className="w-5 h-5" />, href: '/configs' },
   { id: 'setup', label: 'Schema Designer', icon: <MessageSquare className="w-5 h-5" />, href: '/setup' },
+  { id: 'website-builder', label: 'Website Builder', icon: <Globe className="w-5 h-5" />, href: '/website-builder' },
   { id: 'connect', label: 'Connect', icon: <Workflow className="w-5 h-5" />, href: '/connect' },
   {
     id: 'stream',

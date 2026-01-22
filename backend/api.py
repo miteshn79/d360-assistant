@@ -942,6 +942,345 @@ async def delete_config(config_name: str):
 
 
 # ============================================================================
+# WEBSITE BUILDER AGENT
+# ============================================================================
+
+class WebsiteProjectInput(BaseModel):
+    """Input for website project."""
+    customer_name: str
+    country: str
+    industry: str
+    use_case: str
+    branding_assets: Optional[list[dict]] = None
+    llm_provider: Optional[str] = "claude"
+    llm_api_key: Optional[str] = None
+    heroku_api_key: Optional[str] = None
+    use_default_heroku: Optional[bool] = True
+
+
+class WebsiteBuilderChatRequest(BaseModel):
+    """Chat request for website builder agent."""
+    messages: list[dict]
+    project_context: Optional[dict] = None
+
+
+class WebsiteBuilderChatResponse(BaseModel):
+    """Chat response from website builder agent."""
+    response: str
+    project_updates: Optional[dict] = None
+
+
+async def get_claude_client():
+    """Get Claude API client for website builder."""
+    api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY") or os.getenv("LLM_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Claude API key not configured. Set ANTHROPIC_API_KEY, CLAUDE_API_KEY, or LLM_API_KEY environment variable."
+        )
+    return api_key
+
+
+WEBSITE_BUILDER_SYSTEM_PROMPT = """You are a Website Builder Agent that helps Solution Engineers create demo websites integrated with Salesforce Data Cloud, Agentforce, and Personalization.
+
+Your role is to gather requirements through friendly conversation and then generate a complete website. You should:
+1. Ask clarifying questions to understand the customer's needs
+2. Collect: customer name, country, industry, use case details, branding preferences
+3. Suggest appropriate features based on the industry
+4. When ready, confirm the project details before generation
+
+You have expertise in these industries and their typical website needs:
+- Airline: Flight booking, loyalty programs, travel search, seat selection
+- Retail: Product catalog, shopping cart, wishlist, order tracking
+- Banking: Account dashboard, transactions, loan applications, card services
+- Healthcare: Patient portal, appointments, prescriptions, health records
+- Telecommunications: Plan selection, device catalog, account management, support
+
+When generating websites, you'll create:
+- Responsive HTML/CSS/JS pages
+- User registration & login flows
+- Product/service catalog with search
+- Booking/purchase flows with cart
+- Data Cloud event tracking hooks (ready for beacon integration)
+- Personalization zones (ready for Salesforce Personalization)
+- Agentforce chat widget placeholder
+
+Be conversational, helpful, and gather enough detail to create a great demo website.
+Always respond in a friendly, professional tone. Use markdown for formatting when helpful."""
+
+
+@app.post("/api/website-builder/chat")
+async def website_builder_chat(request: WebsiteBuilderChatRequest):
+    """Chat endpoint for website builder agent."""
+    api_key = await get_claude_client()
+
+    # Build messages for Claude
+    messages = []
+    for msg in request.messages:
+        messages.append({
+            "role": msg.get("role", "user"),
+            "content": msg.get("content", "")
+        })
+
+    # Add project context if available
+    context_suffix = ""
+    if request.project_context:
+        context_parts = []
+        if request.project_context.get("customerName"):
+            context_parts.append(f"Customer: {request.project_context['customerName']}")
+        if request.project_context.get("country"):
+            context_parts.append(f"Country: {request.project_context['country']}")
+        if request.project_context.get("industry"):
+            context_parts.append(f"Industry: {request.project_context['industry']}")
+        if request.project_context.get("useCase"):
+            context_parts.append(f"Use Case: {request.project_context['useCase']}")
+        if context_parts:
+            context_suffix = f"\n\n[Current project context: {', '.join(context_parts)}]"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "claude-opus-4-5-20251101",
+                    "max_tokens": 4096,
+                    "system": WEBSITE_BUILDER_SYSTEM_PROMPT + context_suffix,
+                    "messages": messages,
+                },
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            assistant_response = data["content"][0]["text"]
+
+            return WebsiteBuilderChatResponse(
+                response=assistant_response,
+                project_updates=None
+            )
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Claude API error: {e.response.text}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@app.post("/api/website-builder/generate")
+async def generate_website(project: WebsiteProjectInput):
+    """Generate website code based on project specifications."""
+    api_key = await get_claude_client()
+
+    # Use user's API key if provided
+    if project.llm_api_key and project.llm_provider != "claude":
+        # For future: support other LLM providers
+        pass
+
+    generation_prompt = f"""Generate a complete demo website for the following project:
+
+**Customer:** {project.customer_name}
+**Country:** {project.country}
+**Industry:** {project.industry}
+**Use Case:** {project.use_case}
+
+Requirements:
+1. Create a responsive, modern website with these pages:
+   - Homepage with hero section and key features
+   - Product/Service listing page
+   - Detail page for individual items
+   - Search/filter functionality
+   - User registration and login forms
+   - Booking/Cart/Checkout flow
+   - Confirmation page
+   - User account/dashboard page
+
+2. Include Data Cloud tracking hooks:
+   - Page view events
+   - Search events
+   - Product/item view events
+   - Add to cart events
+   - Purchase/booking completion events
+   - User identity events (on login/register)
+
+3. Add placeholder for Agentforce chat widget
+
+4. Add personalization zones (marked with comments)
+
+5. Use professional design with:
+   - Clean, modern UI
+   - Responsive layout (mobile-first)
+   - Professional color scheme appropriate for {project.industry}
+   - High-quality stock photo placeholders from Unsplash
+
+6. Tech stack:
+   - Express.js backend
+   - Vanilla HTML/CSS/JS frontend
+   - No external frameworks (keep it simple)
+
+Return the complete code as a JSON object with this structure:
+{{
+  "files": [
+    {{"path": "server.js", "content": "..."}},
+    {{"path": "package.json", "content": "..."}},
+    {{"path": "public/index.html", "content": "..."}},
+    {{"path": "public/css/style.css", "content": "..."}},
+    {{"path": "public/js/main.js", "content": "..."}},
+    {{"path": "public/js/datacloud.js", "content": "..."}},
+    ... other files
+  ],
+  "instructions": "Setup and deployment instructions"
+}}
+
+Generate production-ready code that can be deployed immediately to Heroku."""
+
+    try:
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "claude-opus-4-5-20251101",
+                    "max_tokens": 64000,
+                    "system": "You are an expert web developer. Generate complete, production-ready website code. Return only valid JSON with the file structure requested. No markdown formatting around the JSON.",
+                    "messages": [
+                        {"role": "user", "content": generation_prompt}
+                    ],
+                },
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            response_text = data["content"][0]["text"]
+
+            # Parse the JSON response
+            try:
+                # Extract JSON from response
+                text = response_text.strip()
+                if "```" in text:
+                    lines = text.split("\n")
+                    json_lines = []
+                    in_json = False
+                    for line in lines:
+                        if line.strip().startswith("```") and not in_json:
+                            in_json = True
+                            continue
+                        elif line.strip().startswith("```") and in_json:
+                            break
+                        elif in_json:
+                            json_lines.append(line)
+                    if json_lines:
+                        text = "\n".join(json_lines)
+
+                start_idx = text.find("{")
+                end_idx = text.rfind("}") + 1
+                if start_idx >= 0 and end_idx > start_idx:
+                    text = text[start_idx:end_idx]
+
+                website_data = json.loads(text)
+                return {
+                    "success": True,
+                    "website": website_data,
+                    "project": {
+                        "customer_name": project.customer_name,
+                        "country": project.country,
+                        "industry": project.industry,
+                    }
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to parse generated website: {str(e)}",
+                    "raw_response": response_text[:2000]
+                }
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Claude API error: {e.response.text}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+
+@app.post("/api/website-builder/deploy")
+async def deploy_website(
+    website_data: dict,
+    app_name: str = Query(..., description="Heroku app name"),
+    heroku_api_key: Optional[str] = Query(None, description="User's Heroku API key")
+):
+    """Deploy generated website to Heroku."""
+    # Use user's Heroku key or default
+    api_key = heroku_api_key or os.getenv("HEROKU_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Heroku API key required. Provide your key or contact admin for shared deployment."
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # Check if app exists, if not create it
+            check_response = await client.get(
+                f"https://api.heroku.com/apps/{app_name}",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Accept": "application/vnd.heroku+json; version=3",
+                }
+            )
+
+            if check_response.status_code == 404:
+                # Create the app
+                create_response = await client.post(
+                    "https://api.heroku.com/apps",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Accept": "application/vnd.heroku+json; version=3",
+                        "Content-Type": "application/json",
+                    },
+                    json={"name": app_name}
+                )
+                if create_response.status_code not in [200, 201]:
+                    raise HTTPException(
+                        status_code=create_response.status_code,
+                        detail=f"Failed to create Heroku app: {create_response.text}"
+                    )
+
+            # For now, return the files and instructions for manual deployment
+            # Full automated deployment would require git push or Heroku Build API
+            return {
+                "success": True,
+                "message": f"Website ready for deployment to '{app_name}'",
+                "app_url": f"https://{app_name}.herokuapp.com",
+                "files": website_data.get("files", []),
+                "instructions": [
+                    "1. Download the generated files",
+                    "2. Initialize git: git init",
+                    "3. Add Heroku remote: heroku git:remote -a " + app_name,
+                    "4. Commit and push: git add . && git commit -m 'Initial deploy' && git push heroku main",
+                    "Or use the Heroku CLI: heroku apps:create " + app_name + " && git push heroku main"
+                ]
+            }
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Heroku API error: {e.response.text}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
+
+
+# ============================================================================
 # HEALTH CHECK
 # ============================================================================
 
