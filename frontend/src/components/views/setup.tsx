@@ -49,11 +49,15 @@ export function SetupView() {
     {
       id: '1',
       role: 'assistant',
-      content: `Hi! I'm your Data Cloud Setup Assistant. I can help you design a data schema for streaming events into Data Cloud.
+      content: `Hi! I'm your **Data Cloud Streaming Setup Assistant**. I'll help you configure your first Streaming Ingestion API source step-by-step.
 
-**Choose a template** from the sidebar to get started quickly, or **describe your use case** and I'll help you design a custom schema.
+**Choose a template** from the sidebar for quick setup, or let's build a custom schema together.
 
-What kind of data would you like to stream?`,
+To get started, tell me:
+1. **What industry** is your customer in? (Airlines, Hotels, Banking, Telcos, Retail, etc.)
+2. **What use case** do you want to demonstrate? (real-time personalization, fraud detection, loyalty, etc.)
+
+This helps me propose the right schema for your demo!`,
       timestamp: new Date(),
     },
   ])
@@ -251,9 +255,9 @@ You can download the YAML configuration or customize it further. What would you 
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-semibold text-sf-navy-900">Setup Assistant</h1>
+              <h1 className="font-semibold text-sf-navy-900">Streaming Setup Assistant</h1>
               <p className="text-sm text-sf-navy-500">
-                AI-powered schema design help
+                Configure your first Data Cloud Streaming Ingestion API
               </p>
             </div>
           </div>

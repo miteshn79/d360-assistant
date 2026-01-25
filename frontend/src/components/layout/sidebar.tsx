@@ -29,13 +29,14 @@ interface NavItem {
   href: string
   requiresAuth?: boolean
   requiresDCToken?: boolean
+  comingSoon?: boolean
 }
 
 const navItems: NavItem[] = [
   { id: 'home', label: 'Home', icon: <Home className="w-5 h-5" />, href: '/' },
   { id: 'configs', label: 'Saved Configs', icon: <Settings className="w-5 h-5" />, href: '/configs' },
-  { id: 'setup', label: 'Schema Designer', icon: <MessageSquare className="w-5 h-5" />, href: '/setup' },
-  { id: 'website-builder', label: 'Website Builder', icon: <Globe className="w-5 h-5" />, href: '/website-builder' },
+  { id: 'setup', label: 'Schema Designer', icon: <MessageSquare className="w-5 h-5" />, href: '/setup', comingSoon: true },
+  { id: 'website-builder', label: 'Website Builder', icon: <Globe className="w-5 h-5" />, href: '/website-builder', comingSoon: true },
   { id: 'connect', label: 'Connect', icon: <Workflow className="w-5 h-5" />, href: '/connect' },
   {
     id: 'stream',
@@ -132,7 +133,8 @@ export function Sidebar() {
           {navItems.map((item) => {
             const isDisabled =
               (item.requiresAuth && !session.authenticated) ||
-              (item.requiresDCToken && !session.hasDCToken)
+              (item.requiresDCToken && !session.hasDCToken) ||
+              item.comingSoon
 
             const isActive = pathname === item.href
 
@@ -148,7 +150,7 @@ export function Sidebar() {
                     {item.icon}
                     <span>{item.label}</span>
                     <span className="ml-auto text-xs bg-sf-navy-700 px-2 py-0.5 rounded">
-                      {item.requiresDCToken ? 'DC Token' : 'Auth'}
+                      {item.comingSoon ? 'Soon' : item.requiresDCToken ? 'DC Token' : 'Auth'}
                     </span>
                   </span>
                 </li>

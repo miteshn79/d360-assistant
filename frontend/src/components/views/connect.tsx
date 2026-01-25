@@ -351,8 +351,8 @@ export function ConnectView() {
                     <div className="p-4">
                       <ol className="list-decimal list-inside space-y-2 text-sm text-sf-navy-600">
                         <li>In Salesforce, go to <strong>Setup</strong></li>
-                        <li>Search for <strong>&quot;App Manager&quot;</strong></li>
-                        <li>Click <strong>&quot;New Connected App&quot;</strong> dropdown and select <strong>&quot;Create an External Client App&quot;</strong></li>
+                        <li>Search for <strong>&quot;External Client App Manager&quot;</strong></li>
+                        <li>Click <strong>&quot;New External Client App&quot;</strong></li>
                         <li>Fill in:
                           <ul className="list-disc list-inside ml-4 mt-1">
                             <li>External Client App Name: <code className="bg-sf-navy-100 px-1 rounded">Data Cloud Debugger</code></li>
@@ -396,6 +396,7 @@ export function ConnectView() {
                         <li>Perform requests at any time (refresh_token, offline_access)</li>
                         <li>Manage Data Cloud Ingestion API data (cdp_ingest_api)</li>
                         <li>Manage Data Cloud profile data (cdp_profile_api)</li>
+                        <li>Perform ANSI SQL queries on Data Cloud data (cdp_query_api)</li>
                       </ul>
 
                       {/* OAuth Scopes Image */}
@@ -454,6 +455,12 @@ export function ConnectView() {
                           />
                         </div>
                       )}
+
+                      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm text-green-800">
+                          <strong>👆 Click &quot;Create&quot;</strong> to save your app before proceeding to Step 4.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -466,8 +473,7 @@ export function ConnectView() {
                     </div>
                     <div className="p-4">
                       <ol className="list-decimal list-inside space-y-2 text-sm text-sf-navy-600">
-                        <li>Save the app and wait for it to be created</li>
-                        <li>Go to the <strong>Policies</strong> tab</li>
+                        <li>After the app is created, go to the <strong>Policies</strong> tab</li>
                         <li>Set <strong>IP Relaxation</strong> to: <code className="bg-sf-navy-100 px-1 rounded">Relax IP restrictions</code></li>
                       </ol>
 
@@ -483,6 +489,47 @@ export function ConnectView() {
                           <Image
                             src="/assets/ip_relaxation_settings.png"
                             alt="IP Relaxation settings"
+                            width={800}
+                            height={400}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Step 5 */}
+                  <div className="border border-sf-navy-200 rounded-xl overflow-hidden">
+                    <div className="bg-sf-navy-50 px-4 py-3 border-b border-sf-navy-200">
+                      <h3 className="font-medium text-sf-navy-900">
+                        Step 5: Get Your Consumer Key
+                      </h3>
+                    </div>
+                    <div className="p-4">
+                      <ol className="list-decimal list-inside space-y-2 text-sm text-sf-navy-600">
+                        <li>Go to the <strong>OAuth Settings</strong> section of your app</li>
+                        <li>Click the <strong>&quot;Consumer Key and Secret&quot;</strong> button</li>
+                        <li>Copy the <strong>Consumer Key</strong> - you&apos;ll need it in the next step</li>
+                      </ol>
+
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          <strong>⏱️ Note:</strong> It takes 2-3 minutes after creating the app for the Consumer Key and Secret button to work. If you get an error, wait a few minutes and try again.
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setExpandedImage(expandedImage === 'consumer' ? null : 'consumer')}
+                        className="mt-4 text-sm text-sf-blue-600 hover:text-sf-blue-700 flex items-center gap-1"
+                      >
+                        {expandedImage === 'consumer' ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        View screenshot
+                      </button>
+                      {expandedImage === 'consumer' && (
+                        <div className="mt-3 border border-sf-navy-200 rounded-lg overflow-hidden">
+                          <Image
+                            src="/assets/consumer_key_secret.png"
+                            alt="Consumer Key and Secret button location"
                             width={800}
                             height={400}
                             className="w-full"
@@ -528,7 +575,7 @@ export function ConnectView() {
                         <code className="bg-sf-navy-100 px-1 rounded">{callbackUrl}</code>
                         <p className="text-xs text-sf-navy-400 mt-1">It can take up to 10 minutes for saved changes to be effective.</p>
                       </li>
-                      <li><strong>OAuth Scopes:</strong> api, refresh_token, cdp_ingest_api, cdp_profile_api</li>
+                      <li><strong>OAuth Scopes:</strong> api, refresh_token, cdp_ingest_api, cdp_profile_api, cdp_query_api</li>
                       <li><strong>PKCE:</strong> Enabled</li>
                       <li><strong>Secret Required:</strong> No</li>
                       <li><strong>IP Relaxation:</strong> Relax IP restrictions</li>
@@ -596,6 +643,18 @@ export function ConnectView() {
                       Sandbox (test.salesforce.com)
                     </option>
                   </select>
+                </div>
+
+                {/* Important notice about what happens next */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="font-medium text-amber-800 mb-2">What happens when you click the button below:</p>
+                  <ol className="list-decimal list-inside text-sm text-amber-700 space-y-1.5">
+                    <li>A <strong>new browser tab</strong> will open asking you to log in to your Salesforce org</li>
+                    <li>After logging in, click <strong>&quot;Allow&quot;</strong> if prompted to authorize the app</li>
+                    <li>You may see an error page or <strong>&quot;This site can&apos;t be reached&quot;</strong> - <em>this is expected!</em></li>
+                    <li><strong>Copy the entire URL</strong> from your browser&apos;s address bar (it contains the authorization code)</li>
+                    <li>Come back to this tab and paste the URL in the box provided</li>
+                  </ol>
                 </div>
 
                 <button

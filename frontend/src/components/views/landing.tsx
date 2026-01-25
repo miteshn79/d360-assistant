@@ -7,11 +7,24 @@ import {
   FileCode,
   Sparkles,
   Workflow,
+  Shield,
 } from 'lucide-react'
 
 export function LandingView() {
   return (
     <div className="min-h-screen">
+      {/* Incognito Mode Notice */}
+      <div className="bg-amber-50 border-b border-amber-200">
+        <div className="max-w-5xl mx-auto px-8 py-3">
+          <div className="flex items-center gap-3">
+            <Shield className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <p className="text-sm text-amber-800">
+              <strong>Recommended:</strong> Use this app in <strong>Incognito/Private mode</strong> to avoid conflicts with org62 or any other Salesforce orgs you may be logged into.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-sf-navy-900 via-sf-navy-800 to-sf-blue-900 text-white">
         <div className="max-w-5xl mx-auto px-8 py-20">

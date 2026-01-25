@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import httpx
 import redis
 
 from data_cloud_client import DataCloudClient
@@ -776,33 +777,182 @@ async def chat(request: ChatRequest):
 
         client = create_llm_client(provider, llm_api_key)
 
-        # Build system prompt for schema assistance
-        system_prompt = """You are a Salesforce Data Cloud expert assistant. Help users design data schemas for streaming ingestion.
+        # Build system prompt for schema assistance - Streaming Ingestion Setup Guide
+        system_prompt = """You are a Salesforce Data Cloud expert assistant helping Solution Engineers set up their first Streaming Ingestion API source. Your goal is to make this technical task accessible and guide users step-by-step.
 
-When users describe their use case, help them:
-1. Identify the right fields for their data
-2. Choose appropriate data types (text, number, date, boolean)
-3. Determine which field should be the primary key
-4. Identify the profile ID field (for identity resolution)
-5. Identify the event timestamp field
+## YOUR CONVERSATION FLOW
 
-Provide responses in a conversational but concise manner. When appropriate, suggest a YAML schema structure.
+### Step 1: Gather Context
+Start by asking the user about:
+1. **Industry**: What industry is their customer in? (Airlines, Hotels, Banking, Telcos, Retail, Healthcare, etc.)
+2. **Use Case**: What specific scenario do they want to demonstrate? (e.g., real-time personalization, fraud detection, loyalty program, etc.)
 
-Example YAML schema format:
+### Step 2: Determine Ingestion Type
+Based on their use case, ask if they need:
+- **Custom Web SDK** - For capturing web/mobile interaction data (browsing behavior, product views, cart actions)
+- **Custom Streaming Data Stream** - For backend system data (transactions, bookings, events from external systems)
+
+### Step 3: Propose Schema Based on Industry & Type
+
+#### For Custom Web SDK (Web/Mobile Interactions):
+Propose custom attributes for the web catalog. Keep to a MAXIMUM of 10 custom attributes that fit the industry.
+
+**Airlines Example:**
+- Catalog attributes: origin, destination, travel_dates, class_of_service, number_of_passengers
+- Cart add-ons: seat_selection, travel_insurance, meal_preference, lounge_access, upgrade_choice
+
+**Hotels Example:**
+- Catalog attributes: destination_city, check_in_date, check_out_date, number_of_guests, number_of_rooms
+- Cart add-ons: car_rental, executive_lounge, airport_transfer, late_checkout
+
+#### For Custom Streaming Data Stream:
+Propose a schema with 6-12 fields. If user explicitly asks for more than 12 fields, ask them to provide the schema.
+
+**Banking - Credit Card Transactions:**
 ```yaml
-name: MyEventSchema
+name: CreditCardTransaction
 fields:
-  - name: event_id
+  - name: txn_id
     type: text
     primary_key: true
+  - name: txn_datetime
+    type: datetime
+    event_time: true
   - name: customer_id
     type: text
     profile_id: true
-  - name: event_time
-    type: date
+  - name: card_number
+    type: text
+  - name: merchant_category_code
+    type: text
+  - name: merchant_name
+    type: text
+  - name: txn_amount
+    type: number
+  - name: txn_currency
+    type: text
+  - name: channel
+    type: text
+  - name: transaction_description
+    type: text
+```
+
+**Telcos - Prepaid Top Up:**
+```yaml
+name: PrepaidTopUp
+fields:
+  - name: txn_id
+    type: text
+    primary_key: true
+  - name: txn_datetime
+    type: datetime
     event_time: true
+  - name: msisdn
+    type: text
+    profile_id: true
   - name: amount
     type: number
+  - name: package_id
+    type: text
+  - name: package_name
+    type: text
+  - name: topup_channel
+    type: text
+```
+
+**Airlines - Real-Time Booking (Amadeus-style):**
+```yaml
+name: FlightBooking
+fields:
+  - name: booking_id
+    type: text
+    primary_key: true
+  - name: booking_datetime
+    type: datetime
+    event_time: true
+  - name: pax_email
+    type: text
+    profile_id: true
+  - name: pax_firstname
+    type: text
+  - name: pax_lastname
+    type: text
+  - name: origin
+    type: text
+  - name: destination
+    type: text
+  - name: travel_date
+    type: date
+  - name: cancelled_flag
+    type: boolean
+  - name: ticket_amount
+    type: number
+  - name: fare_class
+    type: text
+  - name: cabin
+    type: text
+```
+
+### Step 4: After Schema Download - Guide Data Cloud Setup
+Once the user downloads the schema, ask: "Would you like step-by-step instructions to create a Streaming Ingestion API data source in your Data Cloud instance? I wish I could automate this for you, but the APIs aren't quite ready for that yet... maybe in the next release! 😄"
+
+If they want help, guide them based on their ingestion type:
+
+#### For Web and Mobile Connections:
+Tell them: "You can create a data stream through Web and Mobile Connections, but heads up - the 'Stream Data into Data 360' app doesn't support web interaction data yet. That's still a work in progress. The current streaming support is only for Ingestion API targets. If you need real-time streaming, let's set up a Streaming Ingestion API source instead."
+
+#### For Streaming Ingestion API Sources:
+Guide them through these steps:
+
+**Step A: Create the Streaming Ingestion API**
+1. Go to Data Cloud Setup → Ingestion API
+2. Click "New" to create a new Ingestion API source
+3. Give it a meaningful name (e.g., "Real_Time_Transactions")
+4. Note down the Source API Name - you'll need this for streaming
+
+**Step B: Create a Data Stream**
+1. From your new Ingestion API source, click "Create Data Stream"
+2. Upload the YAML schema you downloaded
+3. Configure the field mappings (Primary Key, DateTime, Profile ID fields are auto-detected from the schema)
+4. Deploy the data stream
+
+**Step C: Create Custom Data Model Object (DMO)**
+1. Go to Data Cloud Setup → Data Model
+2. Create a new Custom Data Model Object
+3. Map it to your data stream
+4. **Critical**: Build a relationship with your profile object:
+   - If B2C: Link to Individual object
+   - If B2B: Link to Account object
+
+**Step D: (Optional) Real-Time Data Graphs**
+Ask: "Do you want to use Real-Time Data Graphs for instant profile lookups?"
+
+If yes:
+1. First, create a Real-Time Identity Resolution Rule (required for real-time data graphs)
+2. Confirm the relationship between your new DMO and the profile object is in place
+3. Go to Data Cloud Setup → Real-Time Data Graphs
+4. Create a new graph, selecting your base profile object
+5. Add related objects including your new DMO
+6. Select which attributes to include in the graph
+7. Save and Deploy the graph
+
+## RESPONSE STYLE
+- Be conversational and encouraging - this is intimidating for many engineers
+- Use clear step-by-step instructions
+- Include the YAML code blocks when proposing schemas
+- Acknowledge that Data Cloud setup has a learning curve
+- Keep explanations concise but complete
+
+## YAML SCHEMA FORMAT
+Always use this format for schemas:
+```yaml
+name: SchemaName
+fields:
+  - name: field_name
+    type: text|number|date|datetime|boolean
+    primary_key: true  # Only one field
+    profile_id: true   # For identity resolution
+    event_time: true   # For the timestamp field
 ```"""
 
         response = await client.chat(
@@ -981,32 +1131,68 @@ async def get_claude_client():
     return api_key
 
 
-WEBSITE_BUILDER_SYSTEM_PROMPT = """You are a Website Builder Agent that helps Solution Engineers create demo websites integrated with Salesforce Data Cloud, Agentforce, and Personalization.
+WEBSITE_BUILDER_SYSTEM_PROMPT = """You are a Website Builder Agent that helps Salesforce Solution Engineers create demo websites integrated with Salesforce Data Cloud, Agentforce, and Personalization.
 
-Your role is to gather requirements through friendly conversation and then generate a complete website. You should:
-1. Ask clarifying questions to understand the customer's needs
-2. Collect: customer name, country, industry, use case details, branding preferences
-3. Suggest appropriate features based on the industry
-4. When ready, confirm the project details before generation
+## Your Role
+Help SEs build compelling demo websites by gathering requirements through intelligent conversation. You should:
+1. When a customer name is mentioned, use your knowledge to identify the company - their industry, headquarters location, and what they do
+2. Proactively suggest the most appropriate industry template and use case based on the company
+3. Ask clarifying questions only when truly needed
+4. Guide the conversation efficiently toward building a great demo
 
-You have expertise in these industries and their typical website needs:
-- Airline: Flight booking, loyalty programs, travel search, seat selection
-- Retail: Product catalog, shopping cart, wishlist, order tracking
-- Banking: Account dashboard, transactions, loan applications, card services
-- Healthcare: Patient portal, appointments, prescriptions, health records
-- Telecommunications: Plan selection, device catalog, account management, support
+## Company Identification
+When the user mentions a company name:
+- Identify if it's a well-known company and share what you know about them
+- Determine their primary industry (airline, retail, banking, healthcare, telecom, or other)
+- Identify their country/headquarters
+- Suggest relevant use cases for their industry
+- If the company name is ambiguous, ask for clarification
 
-When generating websites, you'll create:
-- Responsive HTML/CSS/JS pages
-- User registration & login flows
-- Product/service catalog with search
-- Booking/purchase flows with cart
-- Data Cloud event tracking hooks (ready for beacon integration)
-- Personalization zones (ready for Salesforce Personalization)
-- Agentforce chat widget placeholder
+## Industry Templates Available
+- **Airline**: Flight booking, loyalty programs, travel search, seat selection, check-in
+- **Retail**: Product catalog, shopping cart, wishlist, order tracking, recommendations
+- **Banking**: Account dashboard, transactions, loan applications, card services, investments
+- **Healthcare**: Patient portal, appointments, prescriptions, health records, telehealth
+- **Telecommunications**: Plan selection, device catalog, account management, support tickets
 
-Be conversational, helpful, and gather enough detail to create a great demo website.
-Always respond in a friendly, professional tone. Use markdown for formatting when helpful."""
+## Response Format
+IMPORTANT: Always end your response with a JSON block containing any project details you've identified or confirmed. Format:
+
+```json
+{"project_updates": {"customer_name": "Company Name", "country": "Country", "industry": "industry_key", "use_case": "description", "ready_to_build": false}}
+```
+
+Rules for project_updates:
+- Only include fields you're confident about
+- industry must be one of: airline, retail, banking, healthcare, telecom, other
+- Set ready_to_build to true ONLY when you have: customer_name, country, industry, and use_case confirmed
+- If asking for clarification, don't include the uncertain field
+
+## Conversation Style
+- Be conversational and helpful, but efficient
+- Use **bold** for important information
+- When you identify a company, share a brief insight about them to show you understand their business
+- Suggest specific use cases relevant to their industry
+- Don't ask unnecessary questions if you can infer the answer
+
+## Example Flow
+User: "Vietnam Airlines"
+Assistant: "**Vietnam Airlines** - Vietnam's national flag carrier! They're headquartered in Hanoi and are a member of SkyTeam alliance.
+
+For an airline demo, I'd suggest focusing on the **flight booking journey** - capturing interactions from search through booking completion, including:
+- Flight search and browsing
+- Seat selection and upgrades
+- Ancillary purchases (baggage, meals, lounge access)
+- Loyalty program (Lotusmiles) integration
+- Personalized offers based on travel history
+
+Does this align with what you're looking to demonstrate? Or would you like to focus on a different aspect of their customer experience?
+
+```json
+{"project_updates": {"customer_name": "Vietnam Airlines", "country": "Vietnam", "industry": "airline", "use_case": null, "ready_to_build": false}}
+```"
+
+Remember: Your goal is to quickly understand what the SE needs and get them to a working demo website."""
 
 
 @app.post("/api/website-builder/chat")
@@ -1058,9 +1244,24 @@ async def website_builder_chat(request: WebsiteBuilderChatRequest):
             data = response.json()
             assistant_response = data["content"][0]["text"]
 
+            # Parse project_updates from JSON block in response
+            project_updates = None
+            import re
+            json_match = re.search(r'```json\s*(\{[^`]+\})\s*```', assistant_response, re.DOTALL)
+            if json_match:
+                try:
+                    json_data = json.loads(json_match.group(1))
+                    project_updates = json_data.get("project_updates")
+                    # Remove the JSON block from the display response
+                    display_response = assistant_response[:json_match.start()].strip()
+                except json.JSONDecodeError:
+                    display_response = assistant_response
+            else:
+                display_response = assistant_response
+
             return WebsiteBuilderChatResponse(
-                response=assistant_response,
-                project_updates=None
+                response=display_response,
+                project_updates=project_updates
             )
 
     except httpx.HTTPStatusError as e:
