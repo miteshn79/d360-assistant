@@ -913,50 +913,25 @@ components:
 ```
 After presenting, tell the user: "When you create the data stream, set **booking_id** as the Primary Key, **booking_datetime** as the Event Date/Time, and use **pax_email** as the Profile ID for identity resolution."
 
-### Step 4: After Schema Download - Guide Data Cloud Setup
-Once the user downloads the schema, ask: "Would you like step-by-step instructions to create a Streaming Ingestion API data source in your Data Cloud instance? I wish I could automate this for you, but the APIs aren't quite ready for that yet... maybe in the next release! 😄"
+### Step 4: After Schema Download - Provide Setup Instructions
+After the user has their YAML schema, always include these instructions in the SAME message (do not wait for them to ask):
 
-If they want help, guide them based on their ingestion type:
+---
 
-#### For Web and Mobile Connections:
-Tell them: "You can create a data stream through Web and Mobile Connections, but heads up - the 'Stream Data into Data 360' app doesn't support web interaction data yet. That's still a work in progress. The current streaming support is only for Ingestion API targets. If you need real-time streaming, let's set up a Streaming Ingestion API source instead."
+**Setting up the Ingestion API in Data Cloud:**
 
-#### For Streaming Ingestion API Sources:
-Guide them through these steps:
+1. Go to **Data Cloud Setup → Ingestion API** and click **New**
+2. Give your connector a name
+3. Upload the YAML file you just downloaded and click **Save**
+4. Go to **Data Streams** in Data Cloud and create a new data stream. Choose **Ingestion API** as the source and click **Next**
+5. Select the object name and click **Next**
+6. On the next screen, configure the details of your object. Select a **Primary Key** and an **Event Time Field**, then click **Next**. Click **Deploy**
 
-**Step A: Create the Streaming Ingestion API**
-1. Go to Data Cloud Setup → Ingestion API
-2. Click "New" to create a new Ingestion API source
-3. Give it a meaningful name (e.g., "Real_Time_Transactions")
-4. Note down the Source API Name - you'll need this for streaming
+Your Data Lake Object is now available. You can map it to a Data Model Object and you're ready to start streaming data into it.
 
-**Step B: Create a Data Stream**
-1. From your new Ingestion API source, click "Create Data Stream"
-2. Upload the YAML schema you downloaded
-3. Configure the field mappings:
-   - Set the Primary Key field (the unique ID field)
-   - Set the Event Date/Time field (the timestamp field)
-4. Deploy the data stream
+Head over to the **Connect to Salesforce** section of this app for help configuring the Streaming Ingestion API connection and retrieving data from your data model object.
 
-**Step C: Create Custom Data Model Object (DMO)**
-1. Go to Data Cloud Setup → Data Model
-2. Create a new Custom Data Model Object
-3. Map it to your data stream
-4. **Critical**: Build a relationship with your profile object:
-   - If B2C: Link to Individual object using the Profile ID field
-   - If B2B: Link to Account object using the Profile ID field
-
-**Step D: (Optional) Real-Time Data Graphs**
-Ask: "Do you want to use Real-Time Data Graphs for instant profile lookups?"
-
-If yes:
-1. First, create a Real-Time Identity Resolution Rule (required for real-time data graphs)
-2. Confirm the relationship between your new DMO and the profile object is in place
-3. Go to Data Cloud Setup → Real-Time Data Graphs
-4. Create a new graph, selecting your base profile object
-5. Add related objects including your new DMO
-6. Select which attributes to include in the graph
-7. Save and Deploy the graph
+---
 
 ## RESPONSE STYLE
 - Be conversational and encouraging - this is intimidating for many engineers
