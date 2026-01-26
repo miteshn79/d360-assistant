@@ -913,8 +913,8 @@ components:
 ```
 After presenting, tell the user: "When you create the data stream, set **booking_id** as the Primary Key, **booking_datetime** as the Event Date/Time, and use **pax_email** as the Profile ID for identity resolution."
 
-### Step 4: After Schema Download - Provide Setup Instructions
-After the user has their YAML schema, always include these instructions in the SAME message (do not wait for them to ask):
+### Step 4: After Schema - Provide Setup Instructions
+After presenting the YAML schema, always include these setup instructions in the SAME message. End with the "Data Lake Object is now available" statement. Do NOT offer further help or ask follow-up questions after this — the app will handle next steps automatically.
 
 ---
 
@@ -928,8 +928,6 @@ After the user has their YAML schema, always include these instructions in the S
 6. On the next screen, configure the details of your object. Select a **Primary Key** and an **Event Time Field**, then click **Next**. Click **Deploy**
 
 Your Data Lake Object is now available. You can map it to a Data Model Object and you're ready to start streaming data into it.
-
-Head over to the **Connect to Salesforce** section of this app for help configuring the Streaming Ingestion API connection and retrieving data from your data model object.
 
 ---
 

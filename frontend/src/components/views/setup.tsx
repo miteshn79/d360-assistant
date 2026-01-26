@@ -25,6 +25,7 @@ import {
   Globe,
   Check,
 } from 'lucide-react'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { downloadFile, copyToClipboard } from '@/lib/utils'
 
@@ -266,8 +267,8 @@ You can download the YAML configuration or customize it further. What would you 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {messages.map((message) => (
+            <div key={message.id}>
             <div
-              key={message.id}
               className={cn(
                 'flex gap-4 animate-slide-up',
                 message.role === 'user' ? 'flex-row-reverse' : ''
@@ -345,6 +346,29 @@ You can download the YAML configuration or customize it further. What would you 
                   </ReactMarkdown>
                 </div>
               </div>
+            </div>
+
+            {/* Hardcoded Next Steps card after YAML schema response */}
+            {message.role === 'assistant' && message.content.includes('openapi: 3.0.3') && (
+              <div className="flex gap-4 animate-slide-up mt-4">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sf-blue-500 to-sf-blue-600 flex items-center justify-center flex-shrink-0">
+                  <ArrowRight className="w-5 h-5 text-white" />
+                </div>
+                <div className="max-w-[70%] rounded-2xl px-5 py-4 bg-gradient-to-br from-sf-blue-50 to-white border border-sf-blue-200 rounded-tl-md">
+                  <h3 className="font-semibold text-sf-navy-900 mb-2">Next Step: Connect & Stream Data</h3>
+                  <p className="text-sm text-sf-navy-600 mb-4">
+                    Once your Ingestion API and Data Stream are set up in Data Cloud, head over to the Connect page to configure your Streaming Ingestion API connection and start streaming data.
+                  </p>
+                  <Link
+                    href="/connect"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-sf-blue-500 hover:bg-sf-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Connect to Salesforce
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            )}
             </div>
           ))}
 
