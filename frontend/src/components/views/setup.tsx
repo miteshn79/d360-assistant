@@ -308,6 +308,7 @@ You can download the YAML configuration or customize it further. What would you 
                     components={{
                       code: ({ className, children, ...props }) => {
                         const isInline = !className
+                        const codeText = String(children).replace(/\n$/, '')
                         return isInline ? (
                           <code
                             className={cn(
@@ -321,9 +322,21 @@ You can download the YAML configuration or customize it further. What would you 
                             {children}
                           </code>
                         ) : (
-                          <pre className="bg-sf-navy-900 text-sf-navy-100 rounded-lg p-4 overflow-x-auto">
-                            <code {...props}>{children}</code>
-                          </pre>
+                          <div className="relative group">
+                            <button
+                              onClick={() => {
+                                copyToClipboard(codeText)
+                                toast.success('Copied to clipboard!')
+                              }}
+                              className="absolute top-2 right-2 p-1.5 rounded-md bg-sf-navy-700 hover:bg-sf-navy-600 text-sf-navy-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Copy to clipboard"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                            <pre className="bg-sf-navy-900 text-sf-navy-100 rounded-lg p-4 overflow-x-auto">
+                              <code {...props}>{children}</code>
+                            </pre>
+                          </div>
                         )
                       },
                     }}
