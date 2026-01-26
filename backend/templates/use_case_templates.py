@@ -438,61 +438,42 @@ def get_all_categories() -> list[str]:
     return list(TEMPLATE_CATEGORIES.keys())
 
 
+def _to_pascal_case(name: str) -> str:
+    """Convert template name to PascalCase for schema object name."""
+    return "".join(word.capitalize() for word in name.replace("&", "And").replace("/", " ").split())
+
+
 def template_to_yaml(template: UseCaseTemplate) -> str:
-    """Convert a template to YAML schema format for Data Cloud ingestion."""
+    """Convert a template to YAML schema format for Data Cloud ingestion.
+
+    Produces the exact OpenAPI 3.0.3 format that Salesforce Data Cloud
+    accepts for Streaming Ingestion API definitions.
+    """
+    schema_name = _to_pascal_case(template.name)
     yaml_lines = [
-        f"# {template.name} Schema",
-        f"# {template.description}",
-        "",
         "openapi: 3.0.3",
-        "info:",
-        f"  title: {template.name}",
-        "  version: '1.0'",
-        "",
         "components:",
         "  schemas:",
-        f"    {template.id}:",
+        f"    {schema_name}:",
         "      type: object",
-        "      required:",
+        "      properties:",
     ]
 
-    # Add required fields
-    required_fields = [f for f in template.fields if f.required]
-    for field in required_fields:
-        yaml_lines.append(f"        - {field.name}")
-
-    yaml_lines.append("      properties:")
-
-    # Add all fields
     for field in template.fields:
         yaml_lines.append(f"        {field.name}:")
 
-        # Map types
         if field.type == "datetime":
             yaml_lines.append("          type: string")
             yaml_lines.append("          format: date-time")
         elif field.type == "date":
             yaml_lines.append("          type: string")
-            yaml_lines.append("          format: date")
-        elif field.type == "number":
+            yaml_lines.append("          format: date-time")
+        elif field.type in ("number", "integer"):
             yaml_lines.append("          type: number")
-        elif field.type == "integer":
-            yaml_lines.append("          type: integer")
         elif field.type == "boolean":
             yaml_lines.append("          type: boolean")
         else:
             yaml_lines.append("          type: string")
-
-        if field.description:
-            yaml_lines.append(f"          description: \"{field.description}\"")
-
-        if field.example:
-            example_val = field.example
-            if field.type in ("string", "datetime", "date"):
-                example_val = f'"{field.example}"'
-            elif field.type == "boolean":
-                example_val = field.example.lower()
-            yaml_lines.append(f"          example: {example_val}")
 
     return "\n".join(yaml_lines)
 

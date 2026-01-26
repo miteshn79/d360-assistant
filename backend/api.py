@@ -723,15 +723,14 @@ async def get_template_detail(template_id: str):
         "name": template.name,
         "description": template.description,
         "category": template.category,
-        "icon": template.icon,
         "fields": [
             {
                 "name": f.name,
-                "data_type": f.data_type,
+                "data_type": f.type,
                 "required": f.required,
                 "is_primary_key": f.is_primary_key,
                 "is_profile_id": f.is_profile_id,
-                "is_event_time": f.is_event_time,
+                "is_event_time": f.is_datetime,
                 "description": f.description,
                 "example": f.example,
             }
@@ -808,90 +807,111 @@ Propose custom attributes for the web catalog. Keep to a MAXIMUM of 10 custom at
 #### For Custom Streaming Data Stream:
 Propose a schema with 6-12 fields. If user explicitly asks for more than 12 fields, ask them to provide the schema.
 
+IMPORTANT: Use only these data types in the schema:
+- `type: string` for text fields
+- `type: number` for numeric fields (amounts, counts, scores)
+- `type: string` with `format: date-time` for datetime/timestamp fields
+- `type: boolean` for true/false fields
+
+After presenting the schema, always tell the user which fields should be configured as:
+- **Primary Key** - the unique identifier for each record (configured in Data Cloud when creating the data stream)
+- **Event Date/Time** - the timestamp field (configured in Data Cloud when creating the data stream)
+- **Profile ID** - the field used for identity resolution linking (configured when creating the DMO relationship)
+
 **Banking - Credit Card Transactions:**
 ```yaml
-name: CreditCardTransaction
-fields:
-  - name: txn_id
-    type: text
-    primary_key: true
-  - name: txn_datetime
-    type: datetime
-    event_time: true
-  - name: customer_id
-    type: text
-    profile_id: true
-  - name: card_number
-    type: text
-  - name: merchant_category_code
-    type: text
-  - name: merchant_name
-    type: text
-  - name: txn_amount
-    type: number
-  - name: txn_currency
-    type: text
-  - name: channel
-    type: text
-  - name: transaction_description
-    type: text
+openapi: 3.0.3
+components:
+  schemas:
+    CardTransaction:
+      type: object
+      properties:
+        txn_id:
+          type: string
+        txn_datetime:
+          type: string
+          format: date-time
+        customer_id:
+          type: string
+        card_number:
+          type: string
+        merchant_category_code:
+          type: string
+        merchant_name:
+          type: string
+        txn_amount:
+          type: number
+        txn_currency:
+          type: string
+        channel:
+          type: string
+        transaction_description:
+          type: string
 ```
+After presenting, tell the user: "When you create the data stream in Data Cloud, set **txn_id** as the Primary Key, **txn_datetime** as the Event Date/Time field, and use **customer_id** as the Profile ID when you build the DMO relationship."
 
 **Telcos - Prepaid Top Up:**
 ```yaml
-name: PrepaidTopUp
-fields:
-  - name: txn_id
-    type: text
-    primary_key: true
-  - name: txn_datetime
-    type: datetime
-    event_time: true
-  - name: msisdn
-    type: text
-    profile_id: true
-  - name: amount
-    type: number
-  - name: package_id
-    type: text
-  - name: package_name
-    type: text
-  - name: topup_channel
-    type: text
+openapi: 3.0.3
+components:
+  schemas:
+    PrepaidTopUp:
+      type: object
+      properties:
+        txn_id:
+          type: string
+        txn_datetime:
+          type: string
+          format: date-time
+        msisdn:
+          type: string
+        amount:
+          type: number
+        package_id:
+          type: string
+        package_name:
+          type: string
+        topup_channel:
+          type: string
 ```
+After presenting, tell the user: "When you create the data stream, set **txn_id** as the Primary Key, **txn_datetime** as the Event Date/Time, and use **msisdn** as the Profile ID for identity resolution."
 
 **Airlines - Real-Time Booking (Amadeus-style):**
 ```yaml
-name: FlightBooking
-fields:
-  - name: booking_id
-    type: text
-    primary_key: true
-  - name: booking_datetime
-    type: datetime
-    event_time: true
-  - name: pax_email
-    type: text
-    profile_id: true
-  - name: pax_firstname
-    type: text
-  - name: pax_lastname
-    type: text
-  - name: origin
-    type: text
-  - name: destination
-    type: text
-  - name: travel_date
-    type: date
-  - name: cancelled_flag
-    type: boolean
-  - name: ticket_amount
-    type: number
-  - name: fare_class
-    type: text
-  - name: cabin
-    type: text
+openapi: 3.0.3
+components:
+  schemas:
+    FlightBooking:
+      type: object
+      properties:
+        booking_id:
+          type: string
+        booking_datetime:
+          type: string
+          format: date-time
+        pax_firstname:
+          type: string
+        pax_lastname:
+          type: string
+        pax_email:
+          type: string
+        origin:
+          type: string
+        destination:
+          type: string
+        travel_date:
+          type: string
+          format: date-time
+        cancelled_flag:
+          type: boolean
+        ticket_amount:
+          type: number
+        fare_class:
+          type: string
+        cabin:
+          type: string
 ```
+After presenting, tell the user: "When you create the data stream, set **booking_id** as the Primary Key, **booking_datetime** as the Event Date/Time, and use **pax_email** as the Profile ID for identity resolution."
 
 ### Step 4: After Schema Download - Guide Data Cloud Setup
 Once the user downloads the schema, ask: "Would you like step-by-step instructions to create a Streaming Ingestion API data source in your Data Cloud instance? I wish I could automate this for you, but the APIs aren't quite ready for that yet... maybe in the next release! 😄"
@@ -913,7 +933,9 @@ Guide them through these steps:
 **Step B: Create a Data Stream**
 1. From your new Ingestion API source, click "Create Data Stream"
 2. Upload the YAML schema you downloaded
-3. Configure the field mappings (Primary Key, DateTime, Profile ID fields are auto-detected from the schema)
+3. Configure the field mappings:
+   - Set the Primary Key field (the unique ID field)
+   - Set the Event Date/Time field (the timestamp field)
 4. Deploy the data stream
 
 **Step C: Create Custom Data Model Object (DMO)**
@@ -921,8 +943,8 @@ Guide them through these steps:
 2. Create a new Custom Data Model Object
 3. Map it to your data stream
 4. **Critical**: Build a relationship with your profile object:
-   - If B2C: Link to Individual object
-   - If B2B: Link to Account object
+   - If B2C: Link to Individual object using the Profile ID field
+   - If B2B: Link to Account object using the Profile ID field
 
 **Step D: (Optional) Real-Time Data Graphs**
 Ask: "Do you want to use Real-Time Data Graphs for instant profile lookups?"
@@ -943,17 +965,35 @@ If yes:
 - Acknowledge that Data Cloud setup has a learning curve
 - Keep explanations concise but complete
 
-## YAML SCHEMA FORMAT
-Always use this format for schemas:
+## CRITICAL: YAML SCHEMA FORMAT
+You MUST always use this exact OpenAPI 3.0.3 format for all schemas. This is the format Salesforce Data Cloud accepts for Streaming Ingestion API definitions. Do NOT use any other format.
+
 ```yaml
-name: SchemaName
-fields:
-  - name: field_name
-    type: text|number|date|datetime|boolean
-    primary_key: true  # Only one field
-    profile_id: true   # For identity resolution
-    event_time: true   # For the timestamp field
-```"""
+openapi: 3.0.3
+components:
+  schemas:
+    SchemaObjectName:
+      type: object
+      properties:
+        field_name:
+          type: string
+        numeric_field:
+          type: number
+        datetime_field:
+          type: string
+          format: date-time
+        boolean_field:
+          type: boolean
+```
+
+Rules:
+- Always start with `openapi: 3.0.3`
+- Schema goes under `components.schemas.{ObjectName}.type: object.properties`
+- The ObjectName should be PascalCase with no spaces (e.g., CardTransaction, FlightBooking, PrepaidTopUp)
+- Supported types: `string`, `number`, `boolean`
+- For date/datetime fields, use `type: string` with `format: date-time`
+- Do NOT include primary_key, profile_id, or event_time markers in the YAML - these are configured in the Data Cloud UI
+- Instead, always tell the user in your message which fields to set as Primary Key, Event Date/Time, and Profile ID"""
 
         response = await client.chat(
             messages=[
