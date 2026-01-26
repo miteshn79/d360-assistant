@@ -348,16 +348,24 @@ You can download the YAML configuration or customize it further. What would you 
               </div>
             </div>
 
-            {/* Hardcoded Next Steps card after YAML schema response */}
+            {/* Hardcoded setup instructions + Connect link after YAML schema response */}
             {message.role === 'assistant' && message.content.includes('openapi: 3.0.3') && (
               <div className="flex gap-4 animate-slide-up mt-4">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sf-blue-500 to-sf-blue-600 flex items-center justify-center flex-shrink-0">
                   <ArrowRight className="w-5 h-5 text-white" />
                 </div>
                 <div className="max-w-[70%] rounded-2xl px-5 py-4 bg-gradient-to-br from-sf-blue-50 to-white border border-sf-blue-200 rounded-tl-md">
-                  <h3 className="font-semibold text-sf-navy-900 mb-2">Next Step: Connect & Stream Data</h3>
+                  <h3 className="font-semibold text-sf-navy-900 mb-3">Setting up the Ingestion API in Data Cloud</h3>
+                  <ol className="list-decimal list-inside text-sm text-sf-navy-700 space-y-2 mb-4">
+                    <li>Go to <strong>Data Cloud Setup &rarr; Ingestion API</strong> and click <strong>New</strong></li>
+                    <li>Give the connector a name</li>
+                    <li>Upload the YAML schema you downloaded and click <strong>Save</strong></li>
+                    <li>Go to <strong>Data Streams</strong> within Data Cloud and create a new data stream. Choose <strong>Ingestion API</strong> as the source and click <strong>Next</strong></li>
+                    <li>Select the object name and click <strong>Next</strong></li>
+                    <li>On the next screen, configure the details of your object. Select a <strong>Primary Key</strong> and an <strong>Event Time Field</strong>, then click <strong>Next</strong>. Click <strong>Deploy</strong></li>
+                  </ol>
                   <p className="text-sm text-sf-navy-600 mb-4">
-                    Once your Ingestion API and Data Stream are set up in Data Cloud, head over to the Connect page to configure your Streaming Ingestion API connection and start streaming data.
+                    Your Data Lake Object is now available. You can map it to a Data Model Object and you&apos;re ready to start streaming data into it.
                   </p>
                   <Link
                     href="/connect"
