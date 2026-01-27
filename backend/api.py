@@ -1482,6 +1482,63 @@ async def deploy_website(
 
 
 # ============================================================================
+# FEEDBACK
+# ============================================================================
+
+class FeedbackRequest(BaseModel):
+    page: str
+    page_name: Optional[str] = None
+    rating: Optional[str] = None  # "positive" or "negative"
+    comment: Optional[str] = None
+
+
+@app.post("/api/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    """Store user feedback."""
+    feedback_entry = {
+        "page": request.page,
+        "page_name": request.page_name,
+        "rating": request.rating,
+        "comment": request.comment,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    if session_store._redis:
+        try:
+            # Store as a list in Redis
+            session_store._redis.rpush(
+                "dc_feedback",
+                json.dumps(feedback_entry),
+            )
+            return {"success": True}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # In-memory fallback
+    if not hasattr(session_store, '_feedback'):
+        session_store._feedback = []
+    session_store._feedback.append(feedback_entry)
+    return {"success": True}
+
+
+@app.get("/api/feedback")
+async def list_feedback():
+    """List all feedback entries."""
+    entries = []
+
+    if session_store._redis:
+        try:
+            raw = session_store._redis.lrange("dc_feedback", 0, -1)
+            entries = [json.loads(item) for item in raw]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    else:
+        entries = getattr(session_store, '_feedback', [])
+
+    return {"feedback": entries, "count": len(entries)}
+
+
+# ============================================================================
 # HEALTH CHECK
 # ============================================================================
 
