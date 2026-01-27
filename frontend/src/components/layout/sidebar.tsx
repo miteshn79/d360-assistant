@@ -94,7 +94,7 @@ export function Sidebar() {
             <Cloud className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-semibold text-lg">Data Cloud</h1>
+            <h1 className="font-semibold text-lg">D360</h1>
             <p className="text-xs text-sf-navy-400">Assistant</p>
           </div>
         </Link>

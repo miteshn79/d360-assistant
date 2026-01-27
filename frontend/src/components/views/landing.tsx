@@ -142,7 +142,7 @@ export function LandingView() {
             What is this app?
           </h3>
           <p className="text-sf-navy-600 mb-4">
-            <strong>Data Cloud Assistant</strong> helps Salesforce Solution Engineers demonstrate
+            <strong>D360 Assistant</strong> helps Salesforce Solution Engineers demonstrate
             and test Data Cloud&apos;s real-time streaming capabilities.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-sf-navy-600">

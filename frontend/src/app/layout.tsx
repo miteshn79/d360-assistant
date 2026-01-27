@@ -7,7 +7,7 @@ import { Toaster } from 'react-hot-toast'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Data Cloud Assistant',
+  title: 'D360 Assistant',
   description: 'Modern interface for Salesforce Data Cloud operations',
 }
 
