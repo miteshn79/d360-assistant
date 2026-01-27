@@ -112,13 +112,13 @@ export function WebsiteBuilderView() {
     const welcomeMessage: Message = {
       id: '1',
       role: 'assistant',
-      content: `Hi! I'm your Website Builder Agent. I'll help you create a demo website that integrates with Salesforce Data Cloud, Agentforce, and Personalization.
+      content: `Hi! I'm your Website Builder Agent powered by Claude. I'll help you create a demo website that integrates with Salesforce Data Cloud, Agentforce, and Personalization.
 
-Let's start by understanding your customer. **What is the name of the company you're building this demo for?**`,
+**What company are you building this demo for?** Just give me the name and I'll identify their industry and suggest the best approach.`,
       timestamp: new Date(),
     }
     setMessages([welcomeMessage])
-    setConversationStep('customer_name')
+    setConversationStep('gathering_info')
   }
 
   const addAssistantMessage = (content: string, options?: QuickOption[]) => {
@@ -133,7 +133,7 @@ Let's start by understanding your customer. **What is the name of the company yo
   }
 
   const handleSendMessage = async () => {
-    if (!input.trim() && conversationStep !== 'branding') return
+    if (!input.trim()) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -145,11 +145,37 @@ Let's start by understanding your customer. **What is the name of the company yo
     const userInput = input.trim()
     setInput('')
 
-    // Process based on conversation step
-    processUserInput(userInput)
+    // Use Claude API for conversation
+    await processWithClaude(userInput)
   }
 
-  const handleQuickOption = (option: QuickOption) => {
+  const handleQuickOption = async (option: QuickOption) => {
+    // Handle special actions
+    if (option.value === 'start_build') {
+      startGeneration()
+      return
+    }
+    if (option.value === 'download_files') {
+      downloadWebsite()
+      return
+    }
+    if (option.value === 'deploy_heroku') {
+      deployToHeroku()
+      return
+    }
+    if (option.value === 'open_website' && deployedUrl) {
+      window.open(deployedUrl, '_blank')
+      return
+    }
+    if (option.value === 'new_project') {
+      setProject({})
+      setBrandingAssets([])
+      setGeneratedWebsite(null)
+      setDeployedUrl('')
+      startConversation()
+      return
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -158,294 +184,105 @@ Let's start by understanding your customer. **What is the name of the company yo
     }
     setMessages(prev => [...prev, userMessage])
 
-    processUserInput(option.value, option)
+    await processWithClaude(option.label)
   }
 
-  const processUserInput = async (input: string, option?: QuickOption) => {
+  const processWithClaude = async (userInput: string) => {
     setIsLoading(true)
 
-    // Simulate thinking delay for natural feel
-    await new Promise(resolve => setTimeout(resolve, 800))
+    try {
+      // Build conversation history for Claude
+      const conversationHistory = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }))
+
+      // Add the new user message
+      conversationHistory.push({
+        role: 'user',
+        content: userInput
+      })
+
+      const response = await websiteBuilderApi.chat({
+        messages: conversationHistory,
+        project_context: project
+      })
+
+      // Update project with any new information from Claude
+      if (response.project_updates) {
+        const updates = response.project_updates
+        setProject(prev => ({
+          ...prev,
+          customerName: updates.customer_name || prev.customerName,
+          country: updates.country || prev.country,
+          industry: updates.industry || prev.industry,
+          useCase: updates.use_case || prev.useCase,
+        }))
+
+        // Check if ready to build
+        if (updates.ready_to_build) {
+          setConversationStep('ready_to_build')
+          // Add the response with build options
+          addAssistantMessage(response.response, [
+            { label: 'Start Building', value: 'start_build', icon: <Sparkles className="w-4 h-4" />, description: 'Generate and deploy the website' },
+            { label: 'Let me add more details', value: 'more_details', description: 'Continue the conversation' },
+          ])
+        } else {
+          addAssistantMessage(response.response)
+        }
+      } else {
+        addAssistantMessage(response.response)
+      }
+
+    } catch (error: any) {
+      console.error('Chat error:', error)
+      addAssistantMessage(
+        `I encountered an issue connecting to my AI backend. Let me fall back to guided mode.
+
+**What industry is your customer in?**`,
+        industryOptions
+      )
+      setConversationStep('fallback_industry')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Fallback flow for when API is unavailable
+  const processFallback = async (input: string, option?: QuickOption) => {
+    setIsLoading(true)
+    await new Promise(resolve => setTimeout(resolve, 500))
 
     switch (conversationStep) {
-      case 'customer_name':
-        setProject(prev => ({ ...prev, customerName: input }))
-        addAssistantMessage(
-          `Great! **${input}** - I'll make sure the website reflects their brand.
-
-**Which country or region does ${input} primarily operate in?** This helps me localize content, currency, and compliance requirements.`
-        )
-        setConversationStep('country')
-        break
-
-      case 'country':
-        setProject(prev => ({ ...prev, country: input }))
-        addAssistantMessage(
-          `Perfect, targeting **${input}**.
-
-**What industry is ${project.customerName} in?** Select one below or type your own:`,
-          industryOptions
-        )
-        setConversationStep('industry')
-        break
-
-      case 'industry':
+      case 'fallback_industry':
         const industryValue = option?.value || input.toLowerCase()
-        const industryLabel = option?.label || input
         setProject(prev => ({ ...prev, industry: industryValue }))
         addAssistantMessage(
-          `Excellent choice! I have templates optimized for **${industryLabel}** that include:
-- Product/service catalogs
-- User registration & login
-- Booking/purchase flows
-- Loyalty program integration points
-- Personalization zones
+          `Got it! Now tell me about the **specific use case** you want to demonstrate.
 
-Now, **tell me about the specific use case you want to demonstrate.**
-
-For example: "Capture all web interactions from product search to purchase completion, track cart abandonment, and personalize content based on browsing history and loyalty tier."
-
-The more detail you provide, the better I can customize the website.`
+For example: "Capture web interactions from search to purchase, track cart abandonment, personalize based on browsing history."`
         )
-        setConversationStep('use_case')
+        setConversationStep('fallback_usecase')
         break
 
-      case 'use_case':
+      case 'fallback_usecase':
         setProject(prev => ({ ...prev, useCase: input }))
-        addAssistantMessage(
-          `That's a great use case! I'll design the website to capture all those data points for Data Cloud.
-
-**Do you have any branding assets to include?** You can:
-- Paste URLs to logos or images
-- Share brand color hex codes
-- Provide links to brand guidelines
-
-Or I can use professional stock photos and a clean design that you can customize later.`,
-          [
-            { label: 'Add branding assets', value: 'add_branding', description: 'Upload logos, colors, images' },
-            { label: 'Use stock photos', value: 'skip_branding', description: 'I\'ll add professional placeholders' },
-          ]
-        )
-        setConversationStep('branding')
-        break
-
-      case 'branding':
-        if (input === 'skip_branding' || input.toLowerCase().includes('stock') || input.toLowerCase().includes('skip')) {
-          setProject(prev => ({ ...prev, brandingAssets: [] }))
-          addAssistantMessage(
-            `No problem! I'll use high-quality stock photos from Unsplash that match the ${project.industry} industry. You can easily replace them later.
-
-**One more question about the build process.** Which AI model would you like to use for generating the website content and code?`,
-            llmOptions
-          )
-          setConversationStep('llm_choice')
-        } else if (input === 'add_branding') {
-          setShowAssetInput(true)
-          addAssistantMessage(
-            `Great! Paste URLs to your branding assets below. You can add:
-- Logo URLs (PNG, SVG, JPG)
-- Hero image URLs
-- Brand guideline document links
-
-Add as many as you'd like, then click "Done adding assets" when finished.`
-          )
-        } else if (input === 'done_branding') {
-          setShowAssetInput(false)
-          setProject(prev => ({ ...prev, brandingAssets }))
-          addAssistantMessage(
-            `Perfect! I've saved ${brandingAssets.length} branding asset(s).
-
-**Which AI model would you like to use for generating the website content and code?**`,
-            llmOptions
-          )
-          setConversationStep('llm_choice')
-        } else {
-          // User pasted a URL
-          if (input.startsWith('http')) {
-            const newAsset: BrandingAsset = {
-              type: 'url',
-              name: `Asset ${brandingAssets.length + 1}`,
-              value: input,
-            }
-            setBrandingAssets(prev => [...prev, newAsset])
-            addAssistantMessage(
-              `Added! (${brandingAssets.length + 1} asset(s) so far)
-
-Paste another URL or click "Done adding assets" when finished.`,
-              [{ label: 'Done adding assets', value: 'done_branding', description: 'Proceed to next step' }]
-            )
-          } else {
-            addAssistantMessage(
-              `I couldn't recognize that as a URL. Please paste a valid URL starting with http:// or https://, or click an option below.`,
-              [
-                { label: 'Done adding assets', value: 'done_branding', description: 'Proceed with current assets' },
-                { label: 'Use stock photos instead', value: 'skip_branding', description: 'Skip branding assets' },
-              ]
-            )
-          }
-        }
-        break
-
-      case 'llm_choice':
-        if (input === 'claude' || input.toLowerCase().includes('claude')) {
-          setProject(prev => ({ ...prev, llmProvider: 'claude' }))
-          addAssistantMessage(
-            `Great choice! I'll use Claude Opus 4.5 - it's excellent at generating high-quality code and content.
-
-**Last question: Do you have a Heroku account for deploying this website?**
-
-If not, I can deploy it to a shared demo environment (limited to 5 concurrent projects).`,
-            [
-              { label: 'I have a Heroku account', value: 'own_heroku', description: 'I\'ll provide my API key' },
-              { label: 'Use shared environment', value: 'shared_heroku', description: 'Deploy to demo account' },
-            ]
-          )
-          setConversationStep('heroku_choice')
-        } else if (input === 'openai' || input.toLowerCase().includes('openai') || input.toLowerCase().includes('gpt')) {
-          setProject(prev => ({ ...prev, llmProvider: 'openai' }))
-          addAssistantMessage(
-            `Got it! To use OpenAI, I'll need your API key. **Please paste your OpenAI API key below.**
-
-Don't worry - it's stored securely and only used for this build session.`
-          )
-          setConversationStep('llm_api_key')
-        } else {
-          setProject(prev => ({ ...prev, llmProvider: 'other' }))
-          addAssistantMessage(
-            `Interesting! **Which LLM provider would you like to use?** Please provide:
-1. The provider/model name
-2. Your API key
-
-Format: \`provider: your-api-key\``
-          )
-          setConversationStep('llm_api_key')
-        }
-        break
-
-      case 'llm_api_key':
-        setProject(prev => ({ ...prev, llmApiKey: input }))
-        addAssistantMessage(
-          `API key saved securely.
-
-**Last question: Do you have a Heroku account for deploying this website?**`,
-          [
-            { label: 'I have a Heroku account', value: 'own_heroku', description: 'I\'ll provide my API key' },
-            { label: 'Use shared environment', value: 'shared_heroku', description: 'Deploy to demo account' },
-          ]
-        )
-        setConversationStep('heroku_choice')
-        break
-
-      case 'heroku_choice':
-        if (input === 'own_heroku' || input.toLowerCase().includes('have')) {
-          setProject(prev => ({ ...prev, useDefaultHeroku: false }))
-          addAssistantMessage(
-            `Great! **Please paste your Heroku API key.**
-
-You can find it in your Heroku Dashboard → Account Settings → API Key.`
-          )
-          setConversationStep('heroku_api_key')
-        } else {
-          setProject(prev => ({ ...prev, useDefaultHeroku: true }))
-          showProjectSummary()
-        }
-        break
-
-      case 'heroku_api_key':
-        setProject(prev => ({ ...prev, herokuApiKey: input }))
         showProjectSummary()
         break
 
       case 'ready_to_build':
         if (input === 'start_build') {
           startGeneration()
-        } else if (input === 'edit_details') {
-          addAssistantMessage(
-            `No problem! Let's start over. **What is the name of the company you're building this demo for?**`
-          )
-          setProject({})
-          setBrandingAssets([])
-          setConversationStep('customer_name')
         }
         break
 
       case 'post_generation':
         if (input === 'download_files') {
           downloadWebsite()
-          addAssistantMessage(
-            `📥 **Download started!**
-
-The website files have been downloaded as a markdown file. You can extract the code from each section and create the files manually.
-
-**Would you also like to deploy to Heroku?**`,
-            [
-              { label: 'Deploy to Heroku', value: 'deploy_heroku', icon: <Rocket className="w-4 h-4" />, description: 'Launch the website live' },
-              { label: 'I\'m done', value: 'done', description: 'Finish this session' },
-            ]
-          )
         } else if (input === 'deploy_heroku') {
           deployToHeroku()
-        } else if (input === 'done') {
-          addAssistantMessage(
-            `🎉 **Great job!**
-
-Your ${project.customerName} demo website is ready. Here's what you can do next:
-
-1. **Integrate Data Cloud** - Add your beacon ID to capture web events
-2. **Set up Agentforce** - Connect your agent for live chat
-3. **Enable Personalization** - Configure content zones
-
-Need help with any of these? Just ask!`,
-            [
-              { label: 'Start a new project', value: 'new_project', description: 'Build another website' },
-            ]
-          )
-          setConversationStep('completed')
         }
         break
-
-      case 'completed':
-        if (input === 'new_project') {
-          addAssistantMessage(
-            `Let's build another demo website! **What is the name of the company you're building this for?**`
-          )
-          setProject({})
-          setBrandingAssets([])
-          setGeneratedWebsite(null)
-          setDeployedUrl('')
-          setConversationStep('customer_name')
-        }
-        break
-
-      case 'deployed':
-        if (input === 'open_website' && deployedUrl) {
-          window.open(deployedUrl, '_blank')
-          addAssistantMessage(
-            `Opening your website in a new tab! 🌐
-
-Is there anything else you'd like to do?`,
-            [
-              { label: 'Start New Project', value: 'new_project', description: 'Build another website' },
-              { label: 'Download Files', value: 'download_files', icon: <Download className="w-4 h-4" />, description: 'Get source code' },
-            ]
-          )
-          setConversationStep('completed')
-        } else if (input === 'new_project') {
-          addAssistantMessage(
-            `Let's build another demo website! **What is the name of the company you're building this for?**`
-          )
-          setProject({})
-          setBrandingAssets([])
-          setGeneratedWebsite(null)
-          setDeployedUrl('')
-          setConversationStep('customer_name')
-        }
-        break
-
-      default:
-        addAssistantMessage(
-          `I'm not sure how to process that. Let me help you get back on track.`
-        )
     }
 
     setIsLoading(false)

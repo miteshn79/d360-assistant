@@ -445,6 +445,15 @@ export function RetrieveView() {
   // Visible columns per table
   const [visibleColumnsMap, setVisibleColumnsMap] = useState<Record<string, Set<string>>>({})
 
+  // DLO/DMO Query state
+  const [objectName, setObjectName] = useState('')
+  const [dloLookupKey, setDloLookupKey] = useState('')
+  const [dloLookupValue, setDloLookupValue] = useState('')
+  const [queryResult, setQueryResult] = useState<any[] | null>(null)
+  const [queryShowRawJson, setQueryShowRawJson] = useState(false)
+  const [querySortConfig, setQuerySortConfig] = useState<SortConfig | null>(null)
+  const [queryVisibleColumns, setQueryVisibleColumns] = useState<Set<string>>(new Set())
+
   // Save config modal
   const [showSaveConfigModal, setShowSaveConfigModal] = useState(false)
   const [saveConfigName, setSaveConfigName] = useState('')
@@ -534,6 +543,91 @@ export function RetrieveView() {
       return
     }
     retrieveMutation.mutate()
+  }
+
+  // DLO/DMO Query mutation
+  const queryMutation = useMutation({
+    mutationFn: () => {
+      // Build SQL query
+      const escapedObjectName = objectName.trim()
+      let sql = `SELECT * FROM ${escapedObjectName}`
+      if (dloLookupKey.trim() && dloLookupValue.trim()) {
+        const escapedValue = dloLookupValue.trim().replace(/'/g, "\\'")
+        sql += ` WHERE ${dloLookupKey.trim()} = '${escapedValue}'`
+      }
+      sql += ' LIMIT 100'
+      return dataApi.query(session.id || '', sql)
+    },
+    onSuccess: (data: any) => {
+      const rows = data?.data || []
+      setQueryResult(rows)
+      setQuerySortConfig(null)
+      // Initialize visible columns from first row
+      if (rows.length > 0) {
+        setQueryVisibleColumns(new Set(Object.keys(rows[0])))
+      } else {
+        setQueryVisibleColumns(new Set())
+      }
+      toast.success(`Query returned ${rows.length} row${rows.length !== 1 ? 's' : ''}`)
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Query failed')
+    },
+  })
+
+  const handleQuery = () => {
+    if (!objectName.trim()) {
+      toast.error('Please enter an object name')
+      return
+    }
+    queryMutation.mutate()
+  }
+
+  // Build TableData from query results
+  const queryTable = useMemo((): TableData | null => {
+    if (!queryResult || queryResult.length === 0) return null
+    const columns = [...new Set(queryResult.flatMap((row: Record<string, any>) => Object.keys(row)))]
+    return {
+      name: objectName || 'Query Results',
+      columns,
+      rows: queryResult,
+      isEventTable: false,
+    }
+  }, [queryResult, objectName])
+
+  const handleQuerySort = (column: string) => {
+    setQuerySortConfig(prev => {
+      if (prev?.column === column) {
+        return { column, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+      }
+      const isDateTime = queryTable && queryTable.rows.length > 0 && isDateTimeColumn(column, queryTable.rows[0][column])
+      return { column, direction: isDateTime ? 'desc' : 'asc' }
+    })
+  }
+
+  const handleQueryToggleColumn = (column: string) => {
+    setQueryVisibleColumns(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(column)) {
+        if (newSet.size > 1) newSet.delete(column)
+      } else {
+        newSet.add(column)
+      }
+      return newSet
+    })
+  }
+
+  const handleQueryCopy = async () => {
+    await copyToClipboard(JSON.stringify(queryResult, null, 2))
+    toast.success('Copied to clipboard!')
+  }
+
+  const handleQueryDownload = () => {
+    downloadFile(
+      JSON.stringify(queryResult, null, 2),
+      `${objectName || 'query-result'}.json`,
+      'application/json'
+    )
   }
 
   // Save current configuration
@@ -629,7 +723,7 @@ export function RetrieveView() {
             Retrieve Data
           </h1>
           <p className="text-sf-navy-500">
-            Query unified profiles from Data Graphs
+            Query Data Graphs, Data Lake Objects, and Data Model Objects
           </p>
         </div>
 
@@ -736,7 +830,7 @@ export function RetrieveView() {
           </div>
         </div>
 
-        {/* Results */}
+        {/* Data Graph Results */}
         {result && (
           <div className="space-y-6 animate-slide-up">
             {/* Results Header */}
@@ -823,6 +917,154 @@ export function RetrieveView() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Divider */}
+        <div className="flex items-center gap-4 my-8">
+          <div className="flex-1 border-t border-sf-navy-200" />
+          <span className="text-sm font-medium text-sf-navy-400 uppercase tracking-wide">or</span>
+          <div className="flex-1 border-t border-sf-navy-200" />
+        </div>
+
+        {/* DLO/DMO Query Form */}
+        <div className="card mb-6">
+          <div className="p-6">
+            <h2 className="font-medium text-sf-navy-900 mb-6 flex items-center gap-2">
+              <Search className="w-5 h-5 text-sf-blue-500" />
+              Data Object Query (DLO / DMO)
+            </h2>
+
+            <div className="space-y-6">
+              <div>
+                <label className="label">Object Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g., RT_Flight_Bookings_FlightBookin_F9C7F3C0__dll"
+                  value={objectName}
+                  onChange={(e) => setObjectName(e.target.value)}
+                />
+                <p className="text-xs text-sf-navy-400 mt-1.5">
+                  The API name of your Data Lake Object (DLO) or Data Model Object (DMO)
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Lookup Key (optional)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g., customer_id__c"
+                    value={dloLookupKey}
+                    onChange={(e) => setDloLookupKey(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label">Lookup Value (optional)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g., cust127"
+                    value={dloLookupValue}
+                    onChange={(e) => setDloLookupValue(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-sf-blue-50 border border-sf-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-sf-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-sf-blue-800">
+                    <p className="font-medium mb-1">Tips:</p>
+                    <ul className="list-disc list-inside space-y-1 text-sf-blue-700">
+                      <li>Leave lookup key and value empty to retrieve all records (up to 100)</li>
+                      <li>DLO names end with <code className="bg-sf-blue-100 px-1 rounded">__dll</code>, DMO names end with <code className="bg-sf-blue-100 px-1 rounded">__dlm</code></li>
+                      <li>Find object names in <strong>Data Cloud Setup &rarr; Data Lake Objects</strong> or <strong>Data Model</strong></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleQuery}
+                disabled={queryMutation.isPending || !objectName.trim()}
+                className="btn-primary w-full py-3"
+              >
+                {queryMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Querying...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Query Data
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* DLO/DMO Query Results */}
+        {queryResult && (
+          <div className="space-y-6 animate-slide-up mb-8">
+            {/* Results Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Database className="w-5 h-5 text-green-500" />
+                <span className="font-medium text-sf-navy-900">
+                  Query Results
+                </span>
+                <span className="text-xs text-sf-navy-400 bg-sf-navy-100 px-2 py-0.5 rounded-full">
+                  {queryResult.length} row{queryResult.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setQueryShowRawJson(!queryShowRawJson)}
+                  className={cn(
+                    "btn-ghost text-sm py-1.5 px-3",
+                    queryShowRawJson && "bg-sf-navy-100"
+                  )}
+                >
+                  {queryShowRawJson ? <Table className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
+                  {queryShowRawJson ? 'Show Table' : 'Show JSON'}
+                </button>
+                <button onClick={handleQueryCopy} className="btn-ghost p-2">
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button onClick={handleQueryDownload} className="btn-ghost p-2">
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {queryShowRawJson ? (
+              <div className="card">
+                <div className="p-4">
+                  <div className="bg-sf-navy-900 rounded-lg p-4 max-h-[600px] overflow-y-auto">
+                    <pre className="text-sm text-sf-navy-100 font-mono">
+                      {JSON.stringify(queryResult, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            ) : queryTable ? (
+              <DataTable
+                table={queryTable}
+                sortConfig={querySortConfig}
+                onSort={handleQuerySort}
+                visibleColumns={queryVisibleColumns}
+                onToggleColumn={handleQueryToggleColumn}
+              />
+            ) : (
+              <div className="card p-8 text-center text-sf-navy-400">
+                No data returned. Check the object name and try again.
+              </div>
+            )}
           </div>
         )}
 

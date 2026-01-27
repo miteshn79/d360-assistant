@@ -442,6 +442,8 @@ async def execute_query(request: QueryRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        await client.close()
 
 
 @app.get("/api/data/metadata")
