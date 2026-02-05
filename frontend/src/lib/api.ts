@@ -88,6 +88,7 @@ export const dataApi = {
     session_id: string
     data_graph_name: string
     lookup_keys: Record<string, string>
+    dmo_name?: string
   }) =>
     fetchApi<{ data: any }>('/api/data/retrieve', {
       method: 'POST',
@@ -267,4 +268,102 @@ export const websiteBuilderApi = {
       method: 'POST',
       body: JSON.stringify(data.website_data),
     }),
+}
+
+// Agentforce API
+export interface AgentforceIndustry {
+  id: string
+  name: string
+  label: string
+  description: string
+  icon: string
+  path: string
+  components: {
+    customObjects: { apiName: string; label: string; description: string }[]
+    sampleData: { recordCounts: Record<string, number> }
+    agent: { topics: number; actions: number }
+    knowledgeBase: { articleCount: number; manualUpload: boolean }
+  }
+  prerequisites: string[]
+  postDeploymentSteps: string[]
+}
+
+export interface AgentforceDeployResult {
+  success: boolean
+  industry: string
+  instanceUrl: string
+  objects?: {
+    success: boolean
+    status: string
+    deployId?: string
+    error?: string
+  }
+  data?: {
+    success: boolean
+    created: Record<string, number>
+    errors: any[]
+    recordIds: Record<string, Record<string, string>>
+  }
+  agent?: {
+    status: string
+    message: string
+  }
+  errors: string[]
+}
+
+export const agentforceApi = {
+  // List available industry templates
+  listIndustries: () =>
+    fetchApi<{ industries: AgentforceIndustry[]; count: number }>('/api/agentforce/industries'),
+
+  // Get specific industry template details
+  getIndustry: (industryId: string) =>
+    fetchApi<{
+      industry: AgentforceIndustry
+      template: any
+      agentConfig: any
+      sampleData: any
+    }>(`/api/agentforce/industries/${industryId}`),
+
+  // Check Agentforce status in org
+  checkStatus: (sessionId: string) =>
+    fetchApi<{
+      enabled: boolean
+      einsteinBotsEnabled: boolean
+      agentforceEnabled: boolean
+      errors: string[]
+    }>(`/api/agentforce/check?session_id=${sessionId}`),
+
+  // List custom objects
+  listObjects: (sessionId: string) =>
+    fetchApi<{ objects: any[]; count: number }>(
+      `/api/agentforce/objects?session_id=${sessionId}`
+    ),
+
+  // Deploy industry template
+  deploy: (data: {
+    session_id: string
+    industry_id: string
+    deploy_objects: boolean
+    deploy_data: boolean
+    deploy_agent: boolean
+  }) =>
+    fetchApi<AgentforceDeployResult>(
+      `/api/agentforce/deploy?session_id=${data.session_id}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          industry_id: data.industry_id,
+          deploy_objects: data.deploy_objects,
+          deploy_data: data.deploy_data,
+          deploy_agent: data.deploy_agent,
+        }),
+      }
+    ),
+
+  // List agents in org
+  listAgents: (sessionId: string) =>
+    fetchApi<{ agents: any[]; count: number; agentforceEnabled?: boolean }>(
+      `/api/agentforce/agents?session_id=${sessionId}`
+    ),
 }

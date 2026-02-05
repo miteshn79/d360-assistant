@@ -72,7 +72,7 @@ class DataCloudConfig(BaseModel):
         description="Ingestion API base URL"
     )
     ingestion_endpoint_path_template: str = Field(
-        default="/api/v1/ingest/sources/{sourceApiName}/streams/{streamApiName}",
+        default="/api/v1/ingest/sources/{sourceApiName}/{streamApiName}",
         description="Ingestion event endpoint path template"
     )
     ingestion_extra_headers: dict[str, str] = Field(

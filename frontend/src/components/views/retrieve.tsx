@@ -436,6 +436,7 @@ export function RetrieveView() {
   const { session, oauthConfig, retrieveConfig, setRetrieveConfig } = useAppStore()
   const [lookupKey, setLookupKey] = useState('')
   const [lookupValue, setLookupValue] = useState('')
+  const [dmoName, setDmoName] = useState('ssot__Individual__dlm')
   const [result, setResult] = useState<any>(null)
   const [showRawJson, setShowRawJson] = useState(false)
 
@@ -520,6 +521,7 @@ export function RetrieveView() {
         session_id: session.id || '',
         data_graph_name: retrieveConfig.dataGraphName,
         lookup_keys: { [lookupKey]: lookupValue },
+        dmo_name: dmoName,
       }),
     onSuccess: (data) => {
       setResult(data)
@@ -752,13 +754,27 @@ export function RetrieveView() {
                 </p>
               </div>
 
+              <div>
+                <label className="label">DMO Name (Data Model Object)</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g., ssot__Individual__dlm"
+                  value={dmoName}
+                  onChange={(e) => setDmoName(e.target.value)}
+                />
+                <p className="text-xs text-sf-navy-400 mt-1.5">
+                  The DMO to search within. Not used when looking up by UnifiedIndividualId__c.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Lookup Key</label>
                   <input
                     type="text"
                     className="input"
-                    placeholder="e.g., UnifiedIndividualId__c"
+                    placeholder="e.g., ssot__Id__c"
                     value={lookupKey}
                     onChange={(e) => setLookupKey(e.target.value)}
                   />
@@ -768,12 +784,24 @@ export function RetrieveView() {
                   <input
                     type="text"
                     className="input"
-                    placeholder="e.g., 0031234567890abc..."
+                    placeholder="e.g., d716faa8-fda2-47d1-..."
                     value={lookupValue}
                     onChange={(e) => setLookupValue(e.target.value)}
                   />
                 </div>
               </div>
+
+              {lookupKey && lookupValue && (
+                <div className="bg-sf-navy-50 rounded-lg p-3">
+                  <p className="text-xs text-sf-navy-500 mb-1">API call format:</p>
+                  <code className="text-xs text-sf-navy-700 break-all">
+                    {lookupKey === 'UnifiedIndividualId__c'
+                      ? `/api/v1/dataGraph/${retrieveConfig.dataGraphName || '{graphName}'}/${lookupValue}`
+                      : `/api/v1/dataGraph/${retrieveConfig.dataGraphName || '{graphName}'}?lookupKeys=[${dmoName}.${lookupKey}=${lookupValue}]`
+                    }
+                  </code>
+                </div>
+              )}
 
               <div className="bg-sf-blue-50 border border-sf-blue-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
@@ -785,19 +813,19 @@ export function RetrieveView() {
                         <code className="bg-sf-blue-100 px-1 rounded">
                           UnifiedIndividualId__c
                         </code>{' '}
-                        - 32-character hex ID
+                        - Primary key (path-based lookup, no DMO needed)
                       </li>
                       <li>
                         <code className="bg-sf-blue-100 px-1 rounded">
-                          Email__c
+                          ssot__Id__c
                         </code>{' '}
-                        - Email address
+                        - Individual record ID (uses DMO lookupKeys format)
                       </li>
                       <li>
                         <code className="bg-sf-blue-100 px-1 rounded">
                           CustomerId__c
                         </code>{' '}
-                        - Your custom ID field
+                        - Custom field on the Individual DMO
                       </li>
                     </ul>
                   </div>

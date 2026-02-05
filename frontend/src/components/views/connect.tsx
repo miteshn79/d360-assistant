@@ -397,6 +397,7 @@ export function ConnectView() {
                         <li>Manage Data Cloud Ingestion API data (cdp_ingest_api)</li>
                         <li>Manage Data Cloud profile data (cdp_profile_api)</li>
                         <li>Perform ANSI SQL queries on Data Cloud data (cdp_query_api)</li>
+                        <li className="text-sf-blue-600 font-medium">Manage Metadata API (metadata_api) - Required for Agentforce</li>
                       </ul>
 
                       {/* OAuth Scopes Image */}
@@ -575,7 +576,7 @@ export function ConnectView() {
                         <code className="bg-sf-navy-100 px-1 rounded">{callbackUrl}</code>
                         <p className="text-xs text-sf-navy-400 mt-1">It can take up to 10 minutes for saved changes to be effective.</p>
                       </li>
-                      <li><strong>OAuth Scopes:</strong> api, refresh_token, cdp_ingest_api, cdp_profile_api, cdp_query_api</li>
+                      <li><strong>OAuth Scopes:</strong> api, refresh_token, cdp_ingest_api, cdp_profile_api, cdp_query_api, metadata_api (for Agentforce)</li>
                       <li><strong>PKCE:</strong> Enabled</li>
                       <li><strong>Secret Required:</strong> No</li>
                       <li><strong>IP Relaxation:</strong> Relax IP restrictions</li>

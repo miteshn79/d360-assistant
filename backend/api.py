@@ -209,6 +209,7 @@ class RetrieveDataRequest(BaseModel):
     session_id: str
     data_graph_name: str
     lookup_keys: dict
+    dmo_name: str = "ssot__Individual__dlm"
 
 
 class GeneratePayloadRequest(BaseModel):
@@ -506,24 +507,36 @@ async def retrieve_data(request: RetrieveDataRequest):
     client = get_client(session)
 
     try:
-        # Get the record ID from lookup_keys (typically the first value)
-        record_id = None
+        # Get the lookup key name and value
+        lookup_key = None
+        lookup_value = None
         for key, value in request.lookup_keys.items():
-            record_id = value.strip() if isinstance(value, str) else value
+            lookup_key = key.strip() if isinstance(key, str) else key
+            lookup_value = value.strip() if isinstance(value, str) else str(value)
             break
 
-        if not record_id:
-            raise HTTPException(status_code=400, detail="No record ID provided in lookup_keys")
+        if not lookup_value:
+            raise HTTPException(status_code=400, detail="No lookup value provided in lookup_keys")
 
-        # Build the endpoint path: /api/v1/dataGraph/{graphName}/{recordId}
         base_url = client._get_base_url(use_dc_token=True)
         data_graph_name = request.data_graph_name.strip() if request.data_graph_name else ""
-        url = f"{base_url}/api/v1/dataGraph/{data_graph_name}/{record_id}"
+        dmo_name = request.dmo_name.strip() if request.dmo_name else "ssot__Individual__dlm"
+
+        if lookup_key == "UnifiedIndividualId__c":
+            # Primary key lookup: use path-based format
+            url = f"{base_url}/api/v1/dataGraph/{data_graph_name}/{lookup_value}"
+            params = {}
+        else:
+            # Non-primary key lookup: use lookupKeys query parameter
+            # Format: lookupKeys=[DMO__dlm.field__c=value]
+            lookup_keys_param = f"[{dmo_name}.{lookup_key}={lookup_value}]"
+            url = f"{base_url}/api/v1/dataGraph/{data_graph_name}"
+            params = {"lookupKeys": lookup_keys_param}
 
         headers = client._get_auth_headers(use_dc_token=True)
         headers["Accept"] = "application/json"
 
-        response = await client._http_client.get(url, headers=headers)
+        response = await client._http_client.get(url, headers=headers, params=params)
         response.raise_for_status()
 
         return {"data": response.json()}

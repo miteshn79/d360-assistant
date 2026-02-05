@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import {
+  Bot,
   Cloud,
   Database,
   FileJson,
@@ -38,6 +39,13 @@ const navItems: NavItem[] = [
   { id: 'setup', label: 'Schema Designer', icon: <MessageSquare className="w-5 h-5" />, href: '/setup', comingSoon: true },
   { id: 'website-builder', label: 'Website Builder', icon: <Globe className="w-5 h-5" />, href: '/website-builder', comingSoon: true },
   { id: 'connect', label: 'Connect', icon: <Workflow className="w-5 h-5" />, href: '/connect' },
+  {
+    id: 'agentforce',
+    label: 'Agentforce',
+    icon: <Bot className="w-5 h-5" />,
+    href: '/agentforce',
+    requiresAuth: true,
+  },
   {
     id: 'stream',
     label: 'Stream Data',
