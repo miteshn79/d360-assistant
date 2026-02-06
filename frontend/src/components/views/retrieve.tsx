@@ -754,20 +754,6 @@ export function RetrieveView() {
                 </p>
               </div>
 
-              <div>
-                <label className="label">DMO Name (Data Model Object)</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g., ssot__Individual__dlm"
-                  value={dmoName}
-                  onChange={(e) => setDmoName(e.target.value)}
-                />
-                <p className="text-xs text-sf-navy-400 mt-1.5">
-                  The DMO to search within. Not used when looking up by UnifiedIndividualId__c.
-                </p>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Lookup Key</label>
@@ -813,13 +799,13 @@ export function RetrieveView() {
                         <code className="bg-sf-blue-100 px-1 rounded">
                           UnifiedIndividualId__c
                         </code>{' '}
-                        - Primary key (path-based lookup, no DMO needed)
+                        - Primary key (path-based lookup)
                       </li>
                       <li>
                         <code className="bg-sf-blue-100 px-1 rounded">
                           ssot__Id__c
                         </code>{' '}
-                        - Individual record ID (uses DMO lookupKeys format)
+                        - Individual record ID
                       </li>
                       <li>
                         <code className="bg-sf-blue-100 px-1 rounded">
@@ -831,6 +817,23 @@ export function RetrieveView() {
                   </div>
                 </div>
               </div>
+
+              {/* Advanced: DMO Name (collapsed by default) */}
+              {lookupKey && lookupKey !== 'UnifiedIndividualId__c' && (
+                <div className="border border-sf-navy-200 rounded-lg p-3">
+                  <label className="label text-xs">DMO Name (optional)</label>
+                  <input
+                    type="text"
+                    className="input text-sm"
+                    placeholder="ssot__Individual__dlm"
+                    value={dmoName}
+                    onChange={(e) => setDmoName(e.target.value)}
+                  />
+                  <p className="text-xs text-sf-navy-400 mt-1">
+                    Default: ssot__Individual__dlm. Change only if querying a different DMO.
+                  </p>
+                </div>
+              )}
 
               <button
                 onClick={handleRetrieve}
