@@ -816,7 +816,7 @@ export function RetrieveView() {
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="label mb-0">Data Graph Name</label>
                   <button
-                    onClick={handleRefreshMetadata}
+                    onClick={() => handleRefreshMetadata()}
                     disabled={isRefreshingMetadata || dcMetadata.isLoading}
                     className="text-xs text-sf-blue-600 hover:text-sf-blue-700 flex items-center gap-1"
                   >
