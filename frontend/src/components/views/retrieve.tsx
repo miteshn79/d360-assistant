@@ -441,7 +441,7 @@ export function RetrieveView() {
   const [result, setResult] = useState<any>(null)
   const [showRawJson, setShowRawJson] = useState(false)
   const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false)
-  const [liveMode, setLiveMode] = useState(true)  // Real-time data retrieval (default on for demos)
+  const [liveMode, setLiveMode] = useState(false)  // Real-time data retrieval
 
   // Get available lookup keys for the selected data graph
   const selectedDataGraph = dcMetadata.dataGraphs.find(
