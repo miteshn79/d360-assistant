@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  RefreshCw,
   Save,
   Search,
   Table,
@@ -433,12 +434,85 @@ function DataTable({
 }
 
 export function RetrieveView() {
-  const { session, oauthConfig, retrieveConfig, setRetrieveConfig } = useAppStore()
+  const { session, oauthConfig, retrieveConfig, setRetrieveConfig, dcMetadata, setDCMetadata } = useAppStore()
   const [lookupKey, setLookupKey] = useState('')
   const [lookupValue, setLookupValue] = useState('')
   const [dmoName, setDmoName] = useState('ssot__Individual__dlm')
   const [result, setResult] = useState<any>(null)
   const [showRawJson, setShowRawJson] = useState(false)
+  const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false)
+
+  // Get available lookup keys for the selected data graph
+  const selectedDataGraph = dcMetadata.dataGraphs.find(
+    dg => dg.name === retrieveConfig.dataGraphName
+  )
+  const availableLookupKeys = selectedDataGraph?.lookupKeys || []
+
+  // Refresh metadata function
+  const handleRefreshMetadata = async (showToast = true) => {
+    if (!session.id) return
+    setIsRefreshingMetadata(true)
+    setDCMetadata({ isLoading: true, error: null })
+    try {
+      const metadata = await dataApi.getDataGraphs(session.id)
+      setDCMetadata({
+        dataGraphs: metadata.dataGraphs || [],
+        dmos: metadata.dmos || [],
+        dlos: metadata.dlos || [],
+        isLoading: false,
+        error: null,
+      })
+      if (showToast) {
+        toast.success('Metadata refreshed!')
+      }
+    } catch (err: any) {
+      setDCMetadata({
+        isLoading: false,
+        error: err.message || 'Failed to refresh metadata',
+      })
+      if (showToast) {
+        toast.error('Failed to refresh metadata')
+      }
+    } finally {
+      setIsRefreshingMetadata(false)
+    }
+  }
+
+  // Auto-set DMO name when lookup key changes
+  useEffect(() => {
+    const selectedLookupKey = availableLookupKeys.find(lk => lk.name === lookupKey)
+    if (selectedLookupKey?.dmoName) {
+      setDmoName(selectedLookupKey.dmoName)
+    }
+  }, [lookupKey, availableLookupKeys])
+
+  // Auto-fetch metadata when page loads if empty and user has DC token
+  useEffect(() => {
+    const fetchMetadataIfNeeded = async () => {
+      if (session.id && session.hasDCToken && dcMetadata.dataGraphs.length === 0 && !dcMetadata.isLoading && !dcMetadata.error) {
+        setIsRefreshingMetadata(true)
+        setDCMetadata({ isLoading: true, error: null })
+        try {
+          const metadata = await dataApi.getDataGraphs(session.id)
+          setDCMetadata({
+            dataGraphs: metadata.dataGraphs || [],
+            dmos: metadata.dmos || [],
+            dlos: metadata.dlos || [],
+            isLoading: false,
+            error: null,
+          })
+        } catch (err: any) {
+          setDCMetadata({
+            isLoading: false,
+            error: err.message || 'Failed to load metadata',
+          })
+        } finally {
+          setIsRefreshingMetadata(false)
+        }
+      }
+    }
+    fetchMetadataIfNeeded()
+  }, [session.id, session.hasDCToken])
 
   // Sort configs per table
   const [sortConfigs, setSortConfigs] = useState<Record<string, SortConfig>>({})
@@ -739,31 +813,76 @@ export function RetrieveView() {
 
             <div className="space-y-6">
               <div>
-                <label className="label">Data Graph Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g., Customer_360_Graph"
-                  value={retrieveConfig.dataGraphName}
-                  onChange={(e) =>
-                    setRetrieveConfig({ dataGraphName: e.target.value })
-                  }
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="label mb-0">Data Graph Name</label>
+                  <button
+                    onClick={handleRefreshMetadata}
+                    disabled={isRefreshingMetadata || dcMetadata.isLoading}
+                    className="text-xs text-sf-blue-600 hover:text-sf-blue-700 flex items-center gap-1"
+                  >
+                    <RefreshCw className={cn("w-3 h-3", (isRefreshingMetadata || dcMetadata.isLoading) && "animate-spin")} />
+                    {dcMetadata.isLoading ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                {dcMetadata.dataGraphs.length > 0 ? (
+                  <select
+                    className="input"
+                    value={retrieveConfig.dataGraphName}
+                    onChange={(e) => {
+                      setRetrieveConfig({ dataGraphName: e.target.value })
+                      setLookupKey('') // Reset lookup key when data graph changes
+                    }}
+                  >
+                    <option value="">Select a Data Graph...</option>
+                    {dcMetadata.dataGraphs.map((dg) => (
+                      <option key={dg.name} value={dg.name}>
+                        {dg.label || dg.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g., Customer_360_Graph"
+                    value={retrieveConfig.dataGraphName}
+                    onChange={(e) =>
+                      setRetrieveConfig({ dataGraphName: e.target.value })
+                    }
+                  />
+                )}
                 <p className="text-xs text-sf-navy-400 mt-1.5">
-                  The API name of your Data Graph from Data Cloud setup
+                  {dcMetadata.dataGraphs.length > 0
+                    ? `${dcMetadata.dataGraphs.length} Data Graph${dcMetadata.dataGraphs.length !== 1 ? 's' : ''} available`
+                    : 'The API name of your Data Graph from Data Cloud setup'}
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Lookup Key</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="e.g., ssot__Id__c"
-                    value={lookupKey}
-                    onChange={(e) => setLookupKey(e.target.value)}
-                  />
+                  {availableLookupKeys.length > 0 ? (
+                    <select
+                      className="input"
+                      value={lookupKey}
+                      onChange={(e) => setLookupKey(e.target.value)}
+                    >
+                      <option value="">Select a Lookup Key...</option>
+                      {availableLookupKeys.map((lk) => (
+                        <option key={lk.name} value={lk.name}>
+                          {lk.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g., ssot__Id__c"
+                      value={lookupKey}
+                      onChange={(e) => setLookupKey(e.target.value)}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="label">Lookup Value</label>
@@ -968,16 +1087,53 @@ export function RetrieveView() {
 
             <div className="space-y-6">
               <div>
-                <label className="label">Object Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g., RT_Flight_Bookings_FlightBookin_F9C7F3C0__dll"
-                  value={objectName}
-                  onChange={(e) => setObjectName(e.target.value)}
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="label mb-0">Object Name</label>
+                  {(dcMetadata.dmos.length > 0 || dcMetadata.dlos.length > 0) && (
+                    <span className="text-xs text-sf-navy-400">
+                      {dcMetadata.dmos.length} DMO{dcMetadata.dmos.length !== 1 ? 's' : ''}, {dcMetadata.dlos.length} DLO{dcMetadata.dlos.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                {(dcMetadata.dmos.length > 0 || dcMetadata.dlos.length > 0) ? (
+                  <select
+                    className="input"
+                    value={objectName}
+                    onChange={(e) => setObjectName(e.target.value)}
+                  >
+                    <option value="">Select an Object...</option>
+                    {dcMetadata.dmos.length > 0 && (
+                      <optgroup label="Data Model Objects (DMO)">
+                        {dcMetadata.dmos.map((obj) => (
+                          <option key={obj.name} value={obj.name}>
+                            {obj.label || obj.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {dcMetadata.dlos.length > 0 && (
+                      <optgroup label="Data Lake Objects (DLO)">
+                        {dcMetadata.dlos.map((obj) => (
+                          <option key={obj.name} value={obj.name}>
+                            {obj.label || obj.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g., RT_Flight_Bookings_FlightBookin_F9C7F3C0__dll"
+                    value={objectName}
+                    onChange={(e) => setObjectName(e.target.value)}
+                  />
+                )}
                 <p className="text-xs text-sf-navy-400 mt-1.5">
-                  The API name of your Data Lake Object (DLO) or Data Model Object (DMO)
+                  {(dcMetadata.dmos.length > 0 || dcMetadata.dlos.length > 0)
+                    ? 'Select from available objects or type a custom name'
+                    : 'The API name of your Data Lake Object (DLO) or Data Model Object (DMO)'}
                 </p>
               </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAppStore } from '@/lib/store'
-import { authApi } from '@/lib/api'
+import { authApi, dataApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import Image from 'next/image'
@@ -59,6 +59,7 @@ export function ConnectView() {
     setOAuthConfig,
     session,
     setSession,
+    setDCMetadata,
   } = useAppStore()
 
   const [step, setStep] = useState<Step>(
@@ -189,6 +190,28 @@ export function ConnectView() {
       })
       setStep('complete')
       toast.success('Data Cloud token obtained!')
+
+      // Fetch metadata in the background
+      setDCMetadata({ isLoading: true, error: null })
+      dataApi.getDataGraphs(session.id)
+        .then((metadata) => {
+          setDCMetadata({
+            dataGraphs: metadata.dataGraphs || [],
+            dmos: metadata.dmos || [],
+            dlos: metadata.dlos || [],
+            isLoading: false,
+            error: null,
+          })
+          toast.success('Metadata loaded!')
+        })
+        .catch((err) => {
+          console.error('Failed to load metadata:', err)
+          setDCMetadata({
+            isLoading: false,
+            error: err.message || 'Failed to load metadata',
+          })
+          // Don't show error toast - metadata is optional
+        })
     } catch (error: any) {
       toast.error(error.message || 'Failed to exchange token')
     } finally {

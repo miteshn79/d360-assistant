@@ -10,6 +10,25 @@ interface Session {
   userInfo: any | null
 }
 
+interface DataGraphInfo {
+  name: string
+  label?: string
+  lookupKeys: Array<{ name: string; dmoName: string }>
+}
+
+interface DataObjectInfo {
+  name: string
+  label?: string
+}
+
+interface DataCloudMetadata {
+  dataGraphs: DataGraphInfo[]
+  dmos: DataObjectInfo[]
+  dlos: DataObjectInfo[]
+  isLoading: boolean
+  error: string | null
+}
+
 interface AppState {
   // Session
   session: Session
@@ -37,6 +56,11 @@ interface AppState {
   }
   setRetrieveConfig: (config: Partial<AppState['retrieveConfig']>) => void
 
+  // Data Cloud metadata (loaded after DC token exchange)
+  dcMetadata: DataCloudMetadata
+  setDCMetadata: (metadata: Partial<DataCloudMetadata>) => void
+  clearDCMetadata: () => void
+
   // Current view
   currentView: 'landing' | 'setup' | 'connect' | 'stream' | 'retrieve' | 'query' | 'bulk' | 'metadata'
   setCurrentView: (view: AppState['currentView']) => void
@@ -49,6 +73,14 @@ const defaultSession: Session = {
   instanceUrl: null,
   dcInstanceUrl: null,
   userInfo: null,
+}
+
+const defaultDCMetadata: DataCloudMetadata = {
+  dataGraphs: [],
+  dmos: [],
+  dlos: [],
+  isLoading: false,
+  error: null,
 }
 
 export const useAppStore = create<AppState>()(
@@ -85,6 +117,12 @@ export const useAppStore = create<AppState>()(
       },
       setRetrieveConfig: (config) =>
         set((state) => ({ retrieveConfig: { ...state.retrieveConfig, ...config } })),
+
+      // Data Cloud metadata
+      dcMetadata: defaultDCMetadata,
+      setDCMetadata: (metadata) =>
+        set((state) => ({ dcMetadata: { ...state.dcMetadata, ...metadata } })),
+      clearDCMetadata: () => set({ dcMetadata: defaultDCMetadata }),
 
       // Current view
       currentView: 'landing',

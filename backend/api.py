@@ -165,6 +165,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:5000",
         "http://127.0.0.1:5000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
         "https://work-with-d360-ui-7f442aa5de9f.herokuapp.com",
         os.getenv("FRONTEND_URL", ""),  # Allow configurable frontend URL
     ],
@@ -458,6 +460,131 @@ async def get_metadata(session_id: str = Query(...)):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/data/data-graphs")
+async def get_data_graphs(session_id: str = Query(...)):
+    """Get Data Graph metadata including available graphs, DMOs, and DLOs."""
+    session = get_session(session_id)
+    client = get_client(session)
+
+    try:
+        # Fetch data graph metadata and regular metadata in parallel
+        data_graph_result, metadata_result = await asyncio.gather(
+            client.get_data_graphs_metadata(),
+            client.get_metadata(),
+            return_exceptions=True
+        )
+
+        # Debug: Log the raw responses
+        print(f"[DEBUG] Data Graph API response type: {type(data_graph_result)}")
+        if isinstance(data_graph_result, dict):
+            print(f"[DEBUG] Data Graph API keys: {data_graph_result.keys()}")
+            if "metadata" in data_graph_result:
+                meta = data_graph_result["metadata"]
+                print(f"[DEBUG] metadata is list: {isinstance(meta, list)}, len: {len(meta) if isinstance(meta, list) else 'N/A'}")
+                if isinstance(meta, list) and len(meta) > 0:
+                    print(f"[DEBUG] First item keys: {meta[0].keys() if isinstance(meta[0], dict) else meta[0]}")
+        elif isinstance(data_graph_result, list):
+            print(f"[DEBUG] Data Graph API is list, len: {len(data_graph_result)}")
+            if len(data_graph_result) > 0:
+                print(f"[DEBUG] First item: {data_graph_result[0]}")
+        elif isinstance(data_graph_result, Exception):
+            print(f"[DEBUG] Data Graph API error: {data_graph_result}")
+
+        # Process data graphs
+        # API returns: developerName, description, primaryObjectName, version, status, etc.
+        data_graphs = []
+        if not isinstance(data_graph_result, Exception):
+            # The API may return the graphs directly as a list or wrapped in "metadata"
+            raw_graphs = data_graph_result
+            if isinstance(data_graph_result, dict):
+                raw_graphs = data_graph_result.get("metadata", data_graph_result.get("dataGraphs", []))
+            if not isinstance(raw_graphs, list):
+                raw_graphs = []
+
+            for graph in raw_graphs:
+                if isinstance(graph, dict):
+                    # Use developerName as the API name (this is what you use in queries)
+                    dev_name = graph.get("developerName", graph.get("name", ""))
+                    if not dev_name:
+                        continue
+
+                    # Extract lookup keys from the graph metadata
+                    lookup_keys = []
+                    primary_object = graph.get("primaryObjectName", graph.get("rootDmoName", ""))
+
+                    # Check for object field which may contain lookup key info
+                    obj_info = graph.get("object", {})
+                    if isinstance(obj_info, dict):
+                        fields = obj_info.get("fields", [])
+                        if isinstance(fields, list):
+                            for field in fields:
+                                if isinstance(field, dict):
+                                    field_name = field.get("name", field.get("developerName", ""))
+                                    if field_name:
+                                        lookup_keys.append({
+                                            "name": field_name,
+                                            "dmoName": primary_object
+                                        })
+
+                    # Also check dmoLookupKeys if present
+                    dmo_lookup_keys = graph.get("dmoLookupKeys", [])
+                    if isinstance(dmo_lookup_keys, list):
+                        for dmo_key in dmo_lookup_keys:
+                            if isinstance(dmo_key, dict):
+                                dmo_name = dmo_key.get("dmoName", primary_object)
+                                keys = dmo_key.get("keys", [])
+                                if isinstance(keys, list):
+                                    for key in keys:
+                                        if isinstance(key, str):
+                                            lookup_keys.append({
+                                                "name": key,
+                                                "dmoName": dmo_name
+                                            })
+
+                    # Always add UnifiedIndividualId__c as it's a special path-based lookup
+                    # that works for all Data Graphs (not listed in metadata but always available)
+                    unified_id_key = {"name": "UnifiedIndividualId__c", "dmoName": primary_object or "UnifiedIndividual__dlm"}
+                    if not any(lk["name"] == "UnifiedIndividualId__c" for lk in lookup_keys):
+                        lookup_keys.insert(0, unified_id_key)
+
+                    # If still no other lookup keys found, add ssot__Id__c as fallback
+                    if len(lookup_keys) <= 1:
+                        lookup_keys.append({"name": "ssot__Id__c", "dmoName": primary_object or "ssot__Individual__dlm"})
+
+                    data_graphs.append({
+                        "name": dev_name,
+                        "label": graph.get("description", dev_name) or dev_name,
+                        "lookupKeys": lookup_keys
+                    })
+
+        # Process DMOs and DLOs from metadata
+        dmos = []
+        dlos = []
+        if not isinstance(metadata_result, Exception):
+            raw_metadata = metadata_result.get("metadata", []) if isinstance(metadata_result, dict) else []
+            for obj in raw_metadata:
+                if isinstance(obj, dict):
+                    name = obj.get("name", "")
+                    label = obj.get("label", name)
+                    category = obj.get("category", "")
+
+                    # DMOs end with __dlm, DLOs end with __dll
+                    if name.endswith("__dlm"):
+                        dmos.append({"name": name, "label": label})
+                    elif name.endswith("__dll"):
+                        dlos.append({"name": name, "label": label})
+
+        return {
+            "dataGraphs": data_graphs,
+            "dmos": dmos,
+            "dlos": dlos
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        await client.close()
 
 
 @app.post("/api/data/stream")

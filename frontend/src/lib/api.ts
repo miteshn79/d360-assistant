@@ -102,6 +102,17 @@ export const dataApi = {
 
   getInsights: (session_id: string) =>
     fetchApi<{ metadata: any[] }>(`/api/data/insights?session_id=${session_id}`),
+
+  getDataGraphs: (session_id: string) =>
+    fetchApi<{
+      dataGraphs: Array<{
+        name: string
+        label?: string
+        lookupKeys: Array<{ name: string; dmoName: string }>
+      }>
+      dmos: Array<{ name: string; label?: string }>
+      dlos: Array<{ name: string; label?: string }>
+    }>(`/api/data/data-graphs?session_id=${session_id}`),
 }
 
 // Bulk API

@@ -9,6 +9,7 @@ import {
   Cloud,
   Database,
   FileJson,
+  GitBranch,
   Globe,
   Home,
   MessageSquare,
@@ -58,6 +59,13 @@ const navItems: NavItem[] = [
     label: 'Retrieve Data',
     icon: <Database className="w-5 h-5" />,
     href: '/retrieve',
+    requiresDCToken: true,
+  },
+  {
+    id: 'journey',
+    label: 'Customer Journey',
+    icon: <GitBranch className="w-5 h-5" />,
+    href: '/journey',
     requiresDCToken: true,
   },
   {
