@@ -212,6 +212,7 @@ class RetrieveDataRequest(BaseModel):
     data_graph_name: str
     lookup_keys: dict
     dmo_name: str = "ssot__Individual__dlm"
+    live: bool = False  # Set to True to get real-time data instead of precalculated
 
 
 class GeneratePayloadRequest(BaseModel):
@@ -594,8 +595,12 @@ async def stream_data(request: StreamDataRequest):
     client = get_client(session)
 
     try:
+        # Sanitize source and object names (remove tabs, newlines, extra whitespace)
+        source_name = request.source_name.strip().replace('\t', '').replace('\n', '').replace('\r', '')
+        object_name = request.object_name.strip().replace('\t', '').replace('\n', '').replace('\r', '')
+
         # Build the ingestion endpoint path
-        endpoint_path = f"/api/v1/ingest/sources/{request.source_name}/{request.object_name}"
+        endpoint_path = f"/api/v1/ingest/sources/{source_name}/{object_name}"
 
         # Send each record - client will wrap in {"data": [...]} format
         # Records should be a list of objects
@@ -660,9 +665,14 @@ async def retrieve_data(request: RetrieveDataRequest):
             url = f"{base_url}/api/v1/dataGraph/{data_graph_name}"
             params = {"lookupKeys": lookup_keys_param}
 
+        # Add live parameter for real-time data retrieval
+        if request.live:
+            params["live"] = "true"
+
         headers = client._get_auth_headers(use_dc_token=True)
         headers["Accept"] = "application/json"
 
+        print(f"[DEBUG] Data Graph Query - URL: {url}, params: {params}, live: {request.live}")
         response = await client._http_client.get(url, headers=headers, params=params)
         response.raise_for_status()
 

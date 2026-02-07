@@ -729,7 +729,7 @@ fields:
                       className="input"
                       placeholder="e.g., creditcardtransactions"
                       value={streamConfig.sourceName}
-                      onChange={(e) => setStreamConfig({ sourceName: e.target.value })}
+                      onChange={(e) => setStreamConfig({ sourceName: e.target.value.replace(/[\t\n\r]/g, '').trim() })}
                     />
                     <p className="text-xs text-sf-navy-400 mt-1">From "Connector Details" in Setup</p>
                   </div>
@@ -741,7 +741,7 @@ fields:
                       className="input"
                       placeholder="e.g., CardTransaction"
                       value={streamConfig.objectName}
-                      onChange={(e) => setStreamConfig({ objectName: e.target.value })}
+                      onChange={(e) => setStreamConfig({ objectName: e.target.value.replace(/[\t\n\r]/g, '').trim() })}
                     />
                     <p className="text-xs text-sf-navy-400 mt-1">From "Schema" section in Setup</p>
                   </div>

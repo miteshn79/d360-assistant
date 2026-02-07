@@ -441,6 +441,7 @@ export function RetrieveView() {
   const [result, setResult] = useState<any>(null)
   const [showRawJson, setShowRawJson] = useState(false)
   const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false)
+  const [liveMode, setLiveMode] = useState(true)  // Real-time data retrieval (default on for demos)
 
   // Get available lookup keys for the selected data graph
   const selectedDataGraph = dcMetadata.dataGraphs.find(
@@ -596,6 +597,7 @@ export function RetrieveView() {
         data_graph_name: retrieveConfig.dataGraphName,
         lookup_keys: { [lookupKey]: lookupValue },
         dmo_name: dmoName,
+        live: liveMode,
       }),
     onSuccess: (data) => {
       setResult(data)
@@ -953,6 +955,31 @@ export function RetrieveView() {
                   </p>
                 </div>
               )}
+
+              {/* Live Mode Toggle */}
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                <div>
+                  <label className="font-medium text-green-900 text-sm">Real-Time Mode</label>
+                  <p className="text-xs text-green-700">
+                    Query live data instead of precalculated (for real-time data graphs)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLiveMode(!liveMode)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    liveMode ? "bg-green-500" : "bg-sf-navy-200"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      liveMode ? "translate-x-6" : "translate-x-1"
+                    )}
+                  />
+                </button>
+              </div>
 
               <button
                 onClick={handleRetrieve}

@@ -89,6 +89,7 @@ export const dataApi = {
     data_graph_name: string
     lookup_keys: Record<string, string>
     dmo_name?: string
+    live?: boolean  // Set to true for real-time data instead of precalculated
   }) =>
     fetchApi<{ data: any }>('/api/data/retrieve', {
       method: 'POST',
