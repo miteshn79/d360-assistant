@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { dataApi } from '@/lib/api'
 import { useMutation } from '@tanstack/react-query'
@@ -15,6 +15,7 @@ import {
   Database,
   Filter,
   Loader2,
+  RefreshCw,
   Search,
   User,
   X,
@@ -511,11 +512,51 @@ function TimelinePanel({
 
 // Main Journey View Component
 export function JourneyView() {
-  const { session, retrieveConfig, setRetrieveConfig } = useAppStore()
+  const { session, retrieveConfig, setRetrieveConfig, dcMetadata, setDCMetadata } = useAppStore()
   const [lookupKey, setLookupKey] = useState('')
   const [lookupValue, setLookupValue] = useState('')
   const [dmoName, setDmoName] = useState('ssot__Individual__dlm')
   const [result, setResult] = useState<any>(null)
+  const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false)
+
+  // Get available lookup keys for the selected data graph
+  const selectedDataGraph = dcMetadata.dataGraphs.find(
+    dg => dg.name === retrieveConfig.dataGraphName
+  )
+
+  // Auto-fetch metadata on mount if we have a DC token but no metadata
+  useEffect(() => {
+    if (session.hasDCToken && dcMetadata.dataGraphs.length === 0 && !dcMetadata.isLoading) {
+      handleRefreshMetadata(false)
+    }
+  }, [session.hasDCToken])
+
+  // Handle metadata refresh
+  const handleRefreshMetadata = async (showToast = true) => {
+    if (!session.id) return
+    setIsRefreshingMetadata(true)
+    setDCMetadata({ isLoading: true, error: null })
+    try {
+      const metadata = await dataApi.getDataGraphs(session.id)
+      setDCMetadata({
+        dataGraphs: metadata.dataGraphs || [],
+        dmos: metadata.dmos || [],
+        dlos: metadata.dlos || [],
+        isLoading: false,
+        error: null,
+      })
+      if (showToast) {
+        toast.success('Metadata refreshed!')
+      }
+    } catch (error: any) {
+      setDCMetadata({ isLoading: false, error: error.message })
+      if (showToast) {
+        toast.error('Failed to load metadata')
+      }
+    } finally {
+      setIsRefreshingMetadata(false)
+    }
+  }
 
   // Filter state
   const [filters, setFilters] = useState<ActiveFilters>({
@@ -621,27 +662,88 @@ export function JourneyView() {
             </h2>
 
             <div className="space-y-6">
+              {/* Data Graph Name Dropdown */}
               <div>
-                <label className="label">Data Graph Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g., Customer_360_Graph"
-                  value={retrieveConfig.dataGraphName}
-                  onChange={(e) => setRetrieveConfig({ dataGraphName: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Lookup Key</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label mb-0">Data Graph Name</label>
+                  {session.hasDCToken && (
+                    <button
+                      onClick={() => handleRefreshMetadata()}
+                      disabled={isRefreshingMetadata}
+                      className="text-xs text-sf-blue-600 hover:text-sf-blue-700 flex items-center gap-1"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshingMetadata ? 'animate-spin' : ''}`} />
+                      {isRefreshingMetadata ? 'Loading...' : 'Refresh'}
+                    </button>
+                  )}
+                </div>
+                {dcMetadata.dataGraphs.length > 0 ? (
+                  <select
+                    className="input"
+                    value={retrieveConfig.dataGraphName}
+                    onChange={(e) => {
+                      setRetrieveConfig({ dataGraphName: e.target.value })
+                      setLookupKey('')
+                    }}
+                  >
+                    <option value="">-- Select Data Graph --</option>
+                    {dcMetadata.dataGraphs.map((dg) => (
+                      <option key={dg.name} value={dg.name}>
+                        {dg.label || dg.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
                   <input
                     type="text"
                     className="input"
-                    placeholder="e.g., ssot__Id__c"
-                    value={lookupKey}
-                    onChange={(e) => setLookupKey(e.target.value)}
+                    placeholder="e.g., Customer_360_Graph"
+                    value={retrieveConfig.dataGraphName}
+                    onChange={(e) => setRetrieveConfig({ dataGraphName: e.target.value })}
                   />
+                )}
+                {dcMetadata.isLoading && (
+                  <p className="text-xs text-sf-navy-400 mt-1 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Loading Data Graphs...
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Lookup Key Dropdown */}
+                <div>
+                  <label className="label">Lookup Key</label>
+                  {selectedDataGraph && selectedDataGraph.lookupKeys.length > 0 ? (
+                    <select
+                      className="input"
+                      value={lookupKey}
+                      onChange={(e) => {
+                        setLookupKey(e.target.value)
+                        const selectedKey = selectedDataGraph.lookupKeys.find(
+                          lk => lk.name === e.target.value
+                        )
+                        if (selectedKey) {
+                          setDmoName(selectedKey.dmoName)
+                        }
+                      }}
+                    >
+                      <option value="">-- Select Lookup Key --</option>
+                      {selectedDataGraph.lookupKeys.map((lk) => (
+                        <option key={lk.name} value={lk.name}>
+                          {lk.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g., ssot__Id__c"
+                      value={lookupKey}
+                      onChange={(e) => setLookupKey(e.target.value)}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="label">Lookup Value</label>
@@ -655,42 +757,47 @@ export function JourneyView() {
                 </div>
               </div>
 
-              {/* Advanced: DMO Name */}
+              {/* DMO Name - show as dropdown when metadata available */}
               {lookupKey && lookupKey !== 'UnifiedIndividualId__c' && (
                 <div className="border border-sf-navy-200 rounded-lg p-3">
-                  <label className="label text-xs">DMO Name (optional)</label>
-                  <input
-                    type="text"
-                    className="input text-sm"
-                    placeholder="ssot__Individual__dlm"
-                    value={dmoName}
-                    onChange={(e) => setDmoName(e.target.value)}
-                  />
+                  <label className="label text-xs">DMO Name</label>
+                  {dcMetadata.dmos.length > 0 || dcMetadata.dlos.length > 0 ? (
+                    <select
+                      className="input text-sm"
+                      value={dmoName}
+                      onChange={(e) => setDmoName(e.target.value)}
+                    >
+                      <option value="">-- Select DMO --</option>
+                      {dcMetadata.dmos.length > 0 && (
+                        <optgroup label="DMOs">
+                          {dcMetadata.dmos.map((dmo) => (
+                            <option key={dmo.name} value={dmo.name}>
+                              {dmo.label || dmo.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {dcMetadata.dlos.length > 0 && (
+                        <optgroup label="DLOs">
+                          {dcMetadata.dlos.map((dlo) => (
+                            <option key={dlo.name} value={dlo.name}>
+                              {dlo.label || dlo.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="input text-sm"
+                      placeholder="ssot__Individual__dlm"
+                      value={dmoName}
+                      onChange={(e) => setDmoName(e.target.value)}
+                    />
+                  )}
                 </div>
               )}
-
-              <div className="bg-sf-blue-50 border border-sf-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-sf-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-sf-blue-800">
-                    <p className="font-medium mb-1">Lookup Key Tips:</p>
-                    <ul className="list-disc list-inside space-y-1 text-sf-blue-700">
-                      <li>
-                        <code className="bg-sf-blue-100 px-1 rounded">UnifiedIndividualId__c</code>{' '}
-                        - Primary key (path-based lookup)
-                      </li>
-                      <li>
-                        <code className="bg-sf-blue-100 px-1 rounded">ssot__Id__c</code> - Individual
-                        record ID
-                      </li>
-                      <li>
-                        <code className="bg-sf-blue-100 px-1 rounded">CustomerId__c</code> - Custom
-                        field on the Individual DMO
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
 
               <button
                 onClick={handleRetrieve}
