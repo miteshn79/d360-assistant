@@ -9,6 +9,7 @@ import {
   Cloud,
   Database,
   FileJson,
+  Filter,
   GitBranch,
   Globe,
   Home,
@@ -66,6 +67,13 @@ const navItems: NavItem[] = [
     label: 'Customer Journey',
     icon: <GitBranch className="w-5 h-5" />,
     href: '/journey',
+    requiresDCToken: true,
+  },
+  {
+    id: 'data-explorer',
+    label: 'Data Explorer',
+    icon: <Filter className="w-5 h-5" />,
+    href: '/data-explorer',
     requiresDCToken: true,
   },
   {
