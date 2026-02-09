@@ -1635,40 +1635,153 @@ async def deploy_website(
 # FEEDBACK
 # ============================================================================
 
+# Email configuration (optional - set via environment variables)
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+FEEDBACK_EMAIL_TO = os.getenv("FEEDBACK_EMAIL_TO")  # Where to send notifications
+FEEDBACK_EMAIL_FROM = os.getenv("FEEDBACK_EMAIL_FROM", "noreply@d360-assistant.com")
+
+
 class FeedbackRequest(BaseModel):
     page: str
     page_name: Optional[str] = None
+    feedback_type: Optional[str] = "general"  # "bug", "enhancement", or "general"
     rating: Optional[str] = None  # "positive" or "negative"
     comment: Optional[str] = None
+    email: Optional[str] = None  # User's email for follow-up
+
+
+async def send_feedback_email(feedback_entry: dict):
+    """Send email notification for feedback via SendGrid."""
+    if not SENDGRID_API_KEY or not FEEDBACK_EMAIL_TO:
+        return  # Email not configured, skip silently
+
+    feedback_type = feedback_entry.get("feedback_type", "general")
+    page_name = feedback_entry.get("page_name", feedback_entry.get("page", "Unknown"))
+    comment = feedback_entry.get("comment", "No comment provided")
+    user_email = feedback_entry.get("email", "Not provided")
+    timestamp = feedback_entry.get("timestamp", "")
+    rating = feedback_entry.get("rating", "")
+
+    # Build subject line based on feedback type
+    if feedback_type == "bug":
+        subject = f"🚨 URGENT - BUG REPORTED: {page_name}"
+        priority = "HIGH"
+        emoji = "🐛"
+    elif feedback_type == "enhancement":
+        subject = f"💡 Enhancement Request: {page_name}"
+        priority = "MEDIUM"
+        emoji = "💡"
+    else:
+        subject = f"📝 Feedback: {page_name}"
+        priority = "LOW"
+        emoji = "📝"
+
+    # Build email body
+    html_content = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: {'#fee2e2' if feedback_type == 'bug' else '#fef3c7' if feedback_type == 'enhancement' else '#dbeafe'}; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; color: {'#991b1b' if feedback_type == 'bug' else '#92400e' if feedback_type == 'enhancement' else '#1e40af'};">
+                {emoji} {feedback_type.upper() if feedback_type else 'FEEDBACK'}
+            </h1>
+            <p style="margin: 5px 0 0 0; color: #666;">Priority: {priority}</p>
+        </div>
+
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 8px 0; color: #666; width: 120px;">Page:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{page_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666;">Submitted:</td>
+                    <td style="padding: 8px 0;">{timestamp}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666;">User Email:</td>
+                    <td style="padding: 8px 0;">{user_email}</td>
+                </tr>
+                {f'<tr><td style="padding: 8px 0; color: #666;">Rating:</td><td style="padding: 8px 0;">{"👍 Positive" if rating == "positive" else "👎 Negative" if rating == "negative" else "N/A"}</td></tr>' if rating else ''}
+            </table>
+
+            <div style="margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 8px;">
+                <h3 style="margin: 0 0 10px 0; color: #374151;">
+                    {'Bug Description' if feedback_type == 'bug' else 'Enhancement Request' if feedback_type == 'enhancement' else 'Feedback'}
+                </h3>
+                <p style="margin: 0; white-space: pre-wrap; color: #1f2937;">{comment}</p>
+            </div>
+
+            {f'''<div style="margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                <h4 style="margin: 0 0 10px 0; color: #92400e;">⚡ Quick Assessment</h4>
+                <p style="margin: 0; color: #78350f;">This is an automated notification. Please review and triage accordingly.</p>
+            </div>''' if feedback_type == 'bug' else ''}
+        </div>
+
+        <div style="padding: 15px; text-align: center; color: #9ca3af; font-size: 12px;">
+            <p>D360 Assistant Feedback System</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    # Send via SendGrid
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "personalizations": [{"to": [{"email": FEEDBACK_EMAIL_TO}]}],
+                    "from": {"email": FEEDBACK_EMAIL_FROM, "name": "D360 Feedback"},
+                    "subject": subject,
+                    "content": [{"type": "text/html", "value": html_content}],
+                },
+                timeout=10.0,
+            )
+            if response.status_code not in (200, 202):
+                print(f"SendGrid error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Failed to send feedback email: {e}")
 
 
 @app.post("/api/feedback")
 async def submit_feedback(request: FeedbackRequest):
-    """Store user feedback."""
+    """Store user feedback and send email notification."""
     feedback_entry = {
         "page": request.page,
         "page_name": request.page_name,
+        "feedback_type": request.feedback_type or "general",
         "rating": request.rating,
         "comment": request.comment,
+        "email": request.email,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
+    # Store in Redis or memory
     if session_store._redis:
         try:
-            # Store as a list in Redis
             session_store._redis.rpush(
                 "dc_feedback",
                 json.dumps(feedback_entry),
             )
-            return {"success": True}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+    else:
+        if not hasattr(session_store, '_feedback'):
+            session_store._feedback = []
+        session_store._feedback.append(feedback_entry)
 
-    # In-memory fallback
-    if not hasattr(session_store, '_feedback'):
-        session_store._feedback = []
-    session_store._feedback.append(feedback_entry)
-    return {"success": True}
+    # Send email notification (async, don't block response)
+    try:
+        await send_feedback_email(feedback_entry)
+    except Exception as e:
+        # Log but don't fail the request
+        print(f"Email notification failed: {e}")
+
+    return {"success": True, "feedback_type": request.feedback_type}
 
 
 @app.get("/api/feedback")

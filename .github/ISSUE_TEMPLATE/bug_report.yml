@@ -1,0 +1,74 @@
+name: Bug Report
+description: Report something that isn't working correctly
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below.
+
+  - type: dropdown
+    id: page
+    attributes:
+      label: Which page/feature?
+      options:
+        - Home
+        - Connect
+        - Stream Data
+        - Retrieve Data
+        - Customer Journey
+        - Data Explorer
+        - Query (SQL)
+        - Bulk Upload
+        - Metadata
+        - Saved Configs
+        - Website Builder
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug in detail
+      placeholder: When I clicked X, I expected Y to happen, but Z happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we recreate this bug?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical - App is broken/unusable
+        - High - Feature doesn't work
+        - Medium - Workaround exists
+        - Low - Minor issue
+    validations:
+      required: true

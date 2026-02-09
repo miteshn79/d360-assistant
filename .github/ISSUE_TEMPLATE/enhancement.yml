@@ -1,0 +1,70 @@
+name: Enhancement Request
+description: Suggest a new feature or improvement
+title: "[Enhancement]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make the app better? We'd love to hear it!
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this relate to?
+      options:
+        - Stream Data (Ingestion)
+        - Retrieve Data (Data Graphs)
+        - Customer Journey
+        - Data Explorer
+        - Query (SQL)
+        - Bulk Upload
+        - Connect/Authentication
+        - UI/UX
+        - Performance
+        - New Feature
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or problem you're trying to address
+      placeholder: As a solution engineer, I need to... so that I can...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you think this should work?
+      placeholder: It would be great if the app could...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you thought of other ways to solve this?
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: How important is this to you?
+      options:
+        - Critical - Blocking my work
+        - High - Would significantly help
+        - Medium - Nice to have
+        - Low - Just an idea
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other context, screenshots, or examples?
