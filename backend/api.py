@@ -1635,10 +1635,20 @@ async def deploy_website(
 # FEEDBACK
 # ============================================================================
 
-# Email configuration (optional - set via environment variables)
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+# Marketing Cloud configuration (primary)
+MC_CLIENT_ID = os.getenv("MC_CLIENT_ID")
+MC_CLIENT_SECRET = os.getenv("MC_CLIENT_SECRET")
+MC_AUTH_BASE_URI = os.getenv("MC_AUTH_BASE_URI")
+MC_REST_BASE_URI = os.getenv("MC_REST_BASE_URI")
+MC_TRIGGERED_SEND_ID = os.getenv("MC_TRIGGERED_SEND_ID")  # Triggered Send Definition External Key
 FEEDBACK_EMAIL_TO = os.getenv("FEEDBACK_EMAIL_TO")  # Where to send notifications
+
+# SendGrid fallback
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FEEDBACK_EMAIL_FROM = os.getenv("FEEDBACK_EMAIL_FROM", "noreply@d360-assistant.com")
+
+# Cache for MC access token
+_mc_token_cache = {"token": None, "expires_at": 0}
 
 
 class FeedbackRequest(BaseModel):
@@ -1650,10 +1660,49 @@ class FeedbackRequest(BaseModel):
     email: Optional[str] = None  # User's email for follow-up
 
 
-async def send_feedback_email(feedback_entry: dict):
-    """Send email notification for feedback via SendGrid."""
-    if not SENDGRID_API_KEY or not FEEDBACK_EMAIL_TO:
-        return  # Email not configured, skip silently
+async def get_mc_access_token() -> Optional[str]:
+    """Get Marketing Cloud access token (with caching)."""
+    import time
+
+    # Check cache
+    if _mc_token_cache["token"] and time.time() < _mc_token_cache["expires_at"] - 60:
+        return _mc_token_cache["token"]
+
+    if not MC_CLIENT_ID or not MC_CLIENT_SECRET or not MC_AUTH_BASE_URI:
+        return None
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{MC_AUTH_BASE_URI}/v2/token",
+                json={
+                    "grant_type": "client_credentials",
+                    "client_id": MC_CLIENT_ID,
+                    "client_secret": MC_CLIENT_SECRET,
+                },
+                timeout=15.0,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                _mc_token_cache["token"] = data["access_token"]
+                _mc_token_cache["expires_at"] = time.time() + data.get("expires_in", 1200)
+                return data["access_token"]
+            else:
+                print(f"MC auth error: {response.status_code} - {response.text}")
+                return None
+    except Exception as e:
+        print(f"MC auth exception: {e}")
+        return None
+
+
+async def send_feedback_via_mc(feedback_entry: dict) -> bool:
+    """Send email notification via Marketing Cloud Triggered Send."""
+    if not MC_REST_BASE_URI or not MC_TRIGGERED_SEND_ID or not FEEDBACK_EMAIL_TO:
+        return False
+
+    token = await get_mc_access_token()
+    if not token:
+        return False
 
     feedback_type = feedback_entry.get("feedback_type", "general")
     page_name = feedback_entry.get("page_name", feedback_entry.get("page", "Unknown"))
@@ -1664,17 +1713,83 @@ async def send_feedback_email(feedback_entry: dict):
 
     # Build subject line based on feedback type
     if feedback_type == "bug":
-        subject = f"🚨 URGENT - BUG REPORTED: {page_name}"
+        subject = f"URGENT - BUG REPORTED: {page_name}"
         priority = "HIGH"
-        emoji = "🐛"
+        feedback_type_label = "BUG"
     elif feedback_type == "enhancement":
-        subject = f"💡 Enhancement Request: {page_name}"
+        subject = f"Enhancement Request: {page_name}"
         priority = "MEDIUM"
-        emoji = "💡"
+        feedback_type_label = "ENHANCEMENT"
     else:
-        subject = f"📝 Feedback: {page_name}"
+        subject = f"Feedback: {page_name}"
         priority = "LOW"
-        emoji = "📝"
+        feedback_type_label = "FEEDBACK"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # Use Triggered Send API
+            response = await client.post(
+                f"{MC_REST_BASE_URI}/messaging/v1/messageDefinitionSends/key:{MC_TRIGGERED_SEND_ID}/send",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "To": {
+                        "Address": FEEDBACK_EMAIL_TO,
+                        "SubscriberKey": FEEDBACK_EMAIL_TO,
+                        "ContactAttributes": {
+                            "SubscriberAttributes": {
+                                "Subject": subject,
+                                "FeedbackType": feedback_type_label,
+                                "Priority": priority,
+                                "PageName": page_name,
+                                "Comment": comment,
+                                "UserEmail": user_email,
+                                "Timestamp": timestamp,
+                                "Rating": "Positive" if rating == "positive" else "Negative" if rating == "negative" else "N/A",
+                            }
+                        }
+                    }
+                },
+                timeout=15.0,
+            )
+            if response.status_code in (200, 202):
+                print(f"MC email sent successfully for {feedback_type} feedback")
+                return True
+            else:
+                print(f"MC send error: {response.status_code} - {response.text}")
+                return False
+    except Exception as e:
+        print(f"MC send exception: {e}")
+        return False
+
+
+async def send_feedback_via_sendgrid(feedback_entry: dict) -> bool:
+    """Send email notification via SendGrid (fallback)."""
+    if not SENDGRID_API_KEY or not FEEDBACK_EMAIL_TO:
+        return False
+
+    feedback_type = feedback_entry.get("feedback_type", "general")
+    page_name = feedback_entry.get("page_name", feedback_entry.get("page", "Unknown"))
+    comment = feedback_entry.get("comment", "No comment provided")
+    user_email = feedback_entry.get("email", "Not provided")
+    timestamp = feedback_entry.get("timestamp", "")
+    rating = feedback_entry.get("rating", "")
+
+    # Build subject line based on feedback type
+    if feedback_type == "bug":
+        subject = f"URGENT - BUG REPORTED: {page_name}"
+        priority = "HIGH"
+        emoji = "BUG"
+    elif feedback_type == "enhancement":
+        subject = f"Enhancement Request: {page_name}"
+        priority = "MEDIUM"
+        emoji = "ENHANCEMENT"
+    else:
+        subject = f"Feedback: {page_name}"
+        priority = "LOW"
+        emoji = "FEEDBACK"
 
     # Build email body
     html_content = f"""
@@ -1682,7 +1797,7 @@ async def send_feedback_email(feedback_entry: dict):
     <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: {'#fee2e2' if feedback_type == 'bug' else '#fef3c7' if feedback_type == 'enhancement' else '#dbeafe'}; padding: 20px; border-radius: 8px 8px 0 0;">
             <h1 style="margin: 0; color: {'#991b1b' if feedback_type == 'bug' else '#92400e' if feedback_type == 'enhancement' else '#1e40af'};">
-                {emoji} {feedback_type.upper() if feedback_type else 'FEEDBACK'}
+                {emoji}
             </h1>
             <p style="margin: 5px 0 0 0; color: #666;">Priority: {priority}</p>
         </div>
@@ -1701,7 +1816,7 @@ async def send_feedback_email(feedback_entry: dict):
                     <td style="padding: 8px 0; color: #666;">User Email:</td>
                     <td style="padding: 8px 0;">{user_email}</td>
                 </tr>
-                {f'<tr><td style="padding: 8px 0; color: #666;">Rating:</td><td style="padding: 8px 0;">{"👍 Positive" if rating == "positive" else "👎 Negative" if rating == "negative" else "N/A"}</td></tr>' if rating else ''}
+                {f'<tr><td style="padding: 8px 0; color: #666;">Rating:</td><td style="padding: 8px 0;">{"Positive" if rating == "positive" else "Negative" if rating == "negative" else "N/A"}</td></tr>' if rating else ''}
             </table>
 
             <div style="margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 8px;">
@@ -1710,11 +1825,6 @@ async def send_feedback_email(feedback_entry: dict):
                 </h3>
                 <p style="margin: 0; white-space: pre-wrap; color: #1f2937;">{comment}</p>
             </div>
-
-            {f'''<div style="margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                <h4 style="margin: 0 0 10px 0; color: #92400e;">⚡ Quick Assessment</h4>
-                <p style="margin: 0; color: #78350f;">This is an automated notification. Please review and triage accordingly.</p>
-            </div>''' if feedback_type == 'bug' else ''}
         </div>
 
         <div style="padding: 15px; text-align: center; color: #9ca3af; font-size: 12px;">
@@ -1724,7 +1834,6 @@ async def send_feedback_email(feedback_entry: dict):
     </html>
     """
 
-    # Send via SendGrid
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -1741,10 +1850,28 @@ async def send_feedback_email(feedback_entry: dict):
                 },
                 timeout=10.0,
             )
-            if response.status_code not in (200, 202):
+            if response.status_code in (200, 202):
+                return True
+            else:
                 print(f"SendGrid error: {response.status_code} - {response.text}")
+                return False
     except Exception as e:
-        print(f"Failed to send feedback email: {e}")
+        print(f"SendGrid exception: {e}")
+        return False
+
+
+async def send_feedback_email(feedback_entry: dict):
+    """Send email notification - tries Marketing Cloud first, then SendGrid."""
+    # Try Marketing Cloud first
+    if MC_CLIENT_ID and MC_REST_BASE_URI:
+        success = await send_feedback_via_mc(feedback_entry)
+        if success:
+            return
+        print("MC failed, trying SendGrid fallback...")
+
+    # Fallback to SendGrid
+    if SENDGRID_API_KEY:
+        await send_feedback_via_sendgrid(feedback_entry)
 
 
 @app.post("/api/feedback")
