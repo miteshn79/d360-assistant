@@ -9,6 +9,7 @@ import base64
 from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import urlencode
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -226,6 +227,22 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     context: Optional[dict] = None
+
+
+class DataGenerationChatRequest(BaseModel):
+    session_id: str
+    message: str
+    conversation_history: Optional[list[dict]] = None
+
+
+class GenerateScriptRequest(BaseModel):
+    session_id: str
+    industry: str
+    country: str
+    profile_count: int
+    months_of_data: int
+    use_cases: str
+    additional_requirements: Optional[str] = None
 
 
 class BulkJobRequest(BaseModel):
@@ -1124,6 +1141,447 @@ Rules:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/data-generation/chat")
+async def data_generation_chat(request: DataGenerationChatRequest):
+    """Chat endpoint for data generation assistance."""
+    # Get LLM API key from environment (same as schema chat)
+    llm_api_key = (
+        os.getenv("LLM_API_KEY") or
+        os.getenv("PERPLEXITY_API_KEY") or
+        os.getenv("OPENAI_API_KEY") or
+        os.getenv("ANTHROPIC_API_KEY")
+    )
+
+    if not llm_api_key:
+        raise HTTPException(status_code=400, detail="No LLM API key configured")
+
+    try:
+        # Determine provider from key (same logic as schema chat)
+        if "pplx" in llm_api_key.lower() or llm_api_key.startswith("pplx-"):
+            provider = LLMProvider.PERPLEXITY
+        elif llm_api_key.startswith("sk-ant"):
+            provider = LLMProvider.ANTHROPIC
+        else:
+            provider = LLMProvider.OPENAI
+
+        client = create_llm_client(provider, llm_api_key)
+
+        # Build system prompt for data generation guidance
+        system_prompt = """You are a Data Generation Assistant helping Salesforce Solution Engineers create realistic demo data for Data Cloud demonstrations.
+
+## YOUR ROLE
+
+Help SEs generate Python scripts that produce industry-specific, country-localized demo data. You must be flexible and support ANY industry vertical the SE mentions.
+
+## CONVERSATION FLOW
+
+### Step 1: Understand Requirements
+Ask the SE about:
+1. **Industry/Vertical**: What industry is this demo for?
+   - Common examples: Airlines, Hotels, Banking, Insurance, Telco, Retail, Healthcare, Manufacturing, Automotive, Real Estate, Education
+   - Accept ANY industry the SE mentions - adapt your suggestions accordingly
+
+2. **Country/Region**: Where are the customers based?
+   - Important for: realistic names, addresses, phone formats, cultural context
+   - Examples: Vietnam, Indonesia, USA, Japan, Thailand, Singapore, India, Australia, UK, etc.
+
+3. **Number of customer/entity profiles**: How many primary records? (Max 10,000)
+   - For B2C: customers, subscribers, patients, travelers
+   - For B2B: companies, accounts, organizations
+
+4. **Historical data period**: How many months back? (Max 12 months)
+   - This determines transaction volume: more months = more transactions
+   - Typical: 6-12 months gives realistic patterns
+
+5. **Use cases to demonstrate**: What will they show with this data?
+   - Real-time personalization
+   - Churn prediction & prevention
+   - Customer 360 views
+   - Segmentation & targeting
+   - Journey orchestration
+   - Next-best-action/offer
+   - Fraud detection
+   - Loyalty program optimization
+
+### Step 2: Propose Data Model
+
+Based on the industry, propose a data model with these components:
+
+**1. Profile/Entity Data** (1 file)
+The core customer/entity record with demographics and attributes
+- Industry-specific attributes (travelers, subscribers, patients, policyholders, etc.)
+- Country-specific: names, addresses, phone numbers, email formats
+- Demographic attributes: age, gender, location, language preferences
+- Account information: registration date, status, segment
+
+**2. Transaction/Event Data** (2-4 files)
+The main business transactions/events that occur
+- Industry examples:
+  - Airlines: bookings, flight_searches, ancillary_purchases
+  - Banking: card_transactions, loan_applications, account_transfers
+  - Telco: calls, sms, data_usage, recharges
+  - Retail: purchases, returns, product_views
+  - Insurance: claims, policy_renewals, premium_payments
+  - Hotels: reservations, checkins, room_service_orders
+  - Healthcare: appointments, prescriptions, lab_results
+  - Automotive: service_appointments, parts_purchases, test_drives
+  - Manufacturing: orders, shipments, quality_checks
+
+**3. Behavioral/Interaction Data** (1-2 files)
+Digital interactions and engagement
+- web_sessions, app_events, email_opens, search_events, cart_abandonments
+
+**4. Calculated/Aggregate Data** (1 file)
+Metrics and scores for segmentation
+- customer_lifetime_value, churn_risk_score, propensity_scores, rfm_segments
+
+**5. Reference Data** (optional, 1-2 files)
+Catalog data specific to industry
+- Airlines: routes, aircraft
+- Retail: products, categories
+- Banking: product_catalog
+- Telco: plans, devices
+
+### Step 3: Industry-Specific Customization
+
+For each industry, think about:
+
+**Product/Service Names**: Use realistic, industry-specific names
+- Airlines: route names, fare classes (Economy Saver, Business Flex)
+- Banking: product names (Premium Checking, Gold Credit Card, Home Loan)
+- Telco: plan names (Unlimited Premium, Family Share 5GB)
+- Retail: realistic product categories and SKUs
+- Insurance: policy types (Auto Comprehensive, Term Life 20Y)
+- Hotels: room types (Deluxe King, Executive Suite)
+
+**Transaction Patterns**: Industry-realistic behaviors
+- Airlines: booking windows (7-60 days advance), seasonal peaks, route preferences
+- Banking: transaction frequencies, merchant categories, amounts
+- Telco: usage patterns (peak hours, weekend spikes), recharge cycles
+- Retail: shopping frequency, basket sizes, seasonal patterns
+
+**Country Localization**: Adapt to the country
+- Names: Use Faker library with country locale (Faker('vi_VN'), Faker('id_ID'), Faker('en_US'), Faker('ja_JP'))
+- Addresses: Country-specific formats
+- Phone numbers: Country codes and formats (+84 for Vietnam, +62 for Indonesia, etc.)
+- Currency: Local currency codes (VND, IDR, USD, JPY, etc.)
+- Language preferences: Based on country
+
+### Step 4: Specify Data Volumes
+
+Based on profiles and months, calculate realistic transaction volumes:
+
+**Rule of thumb**:
+- Retail: 3-8 transactions per customer per month
+- Banking: 15-30 transactions per customer per month
+- Telco: Daily usage records = ~30 per customer per month
+- Airlines: 0.5-2 bookings per traveler per year
+- Insurance: 0.1-0.5 claims per customer per year
+- Hotels: 1-4 stays per customer per year
+
+**Max limit**: 1.2M total transaction rows across all files
+
+### Step 5: Provide Summary
+
+Once you understand all requirements, provide a clear summary:
+
+```
+## Data Generation Plan
+
+**Industry**: [Industry]
+**Country**: [Country]
+**Profiles**: [N] customers
+**Time Period**: [M] months ([Start Date] to [End Date])
+
+### Data Files to Generate:
+
+1. **customer_profiles.csv** (~[N] rows)
+   - Fields: customer_id, first_name, last_name, email, phone, address, city, region, country, age, gender, registration_date, segment, status
+
+2. **[transaction_type].csv** (~[X] rows)
+   - Fields: [specific fields for this industry]
+
+3. **[another_transaction].csv** (~[Y] rows)
+   - Fields: [specific fields]
+
+4. **behavioral_events.csv** (~[Z] rows)
+   - web_session_id, customer_id, event_type, timestamp, page_url, device_type, etc.
+
+5. **customer_scores.csv** (~[N] rows)
+   - customer_id, clv_score, churn_risk, segment, calculated_date
+
+**Total Estimated Rows**: ~[Total] rows
+
+### Industry-Specific Details:
+- [Product/service names will be...]
+- [Transaction patterns will reflect...]
+- [Country localization: names will use [locale], phone format [format], currency [code]]
+
+Ready to generate the Python script?
+```
+
+## IMPORTANT GUIDELINES
+
+1. **Be Flexible**: Support ANY industry, even uncommon ones (logistics, agriculture, energy, government services, etc.)
+2. **Adapt Product Names**: Generate realistic, industry-appropriate product/service names
+3. **Localize Demographics**: Always use country-appropriate names, addresses, phone formats
+4. **Realistic Volumes**: Keep total rows under 1.2M, distribute appropriately across files
+5. **Industry Patterns**: Model realistic transaction patterns for the specific industry
+6. **Ask Clarifying Questions**: If unsure about the SE's industry or requirements, ask specific questions
+
+## RESPONSE STYLE
+
+- Be conversational and helpful
+- Show expertise in both data modeling and the industries you're helping with
+- Provide specific examples relevant to their industry
+- Confirm understanding before generating the script
+"""
+
+        # Build conversation messages
+        messages = []
+
+        # Add conversation history if provided
+        if request.conversation_history:
+            for msg in request.conversation_history:
+                messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
+
+        # Add current message
+        messages.append({
+            "role": "user",
+            "content": request.message
+        })
+
+        response = await client.chat(
+            messages=[{"role": "system", "content": system_prompt}] + messages,
+            context=None,
+        )
+        await client.close()
+
+        return {
+            "success": True,
+            "message": response,
+        }
+    except Exception as e:
+        if 'client' in locals():
+            await client.close()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/data-generation/generate-script")
+async def generate_data_script(request: GenerateScriptRequest):
+    """Generate a complete Python data generation script package."""
+    # Get LLM API key (prefer Anthropic for script generation)
+    llm_api_key = (
+        os.getenv("ANTHROPIC_API_KEY") or
+        os.getenv("LLM_API_KEY") or
+        os.getenv("OPENAI_API_KEY")
+    )
+
+    if not llm_api_key:
+        raise HTTPException(status_code=400, detail="No LLM API key configured")
+
+    try:
+        # Read the airline example script as a template reference
+        example_script_path = Path(__file__).parent.parent / "airline_data_model" / "generate_test_data.py"
+        example_script = ""
+        if example_script_path.exists():
+            with open(example_script_path, 'r') as f:
+                example_script = f.read()
+
+        # Build generation prompt for Claude
+        generation_prompt = f"""Generate a complete Python data generation script package for a Salesforce Data Cloud demo.
+
+## Requirements
+
+**Industry**: {request.industry}
+**Country**: {request.country}
+**Number of Profiles**: {request.profile_count}
+**Historical Data Period**: {request.months_of_data} months
+**Use Cases**: {request.use_cases}
+{"**Additional Requirements**: " + request.additional_requirements if request.additional_requirements else ""}
+
+## Your Task
+
+Generate a complete, production-ready Python script that creates realistic demo data for this industry and country.
+
+## Reference Example
+
+Here's an example script for the airline industry (Vietnam). Use this as a structural reference, but ADAPT EVERYTHING to the {request.industry} industry and {request.country} country:
+
+```python
+{example_script[:15000]}  # First 15k chars for context
+```
+
+## Instructions
+
+1. **Industry Adaptation**:
+   - Replace ALL airline-specific concepts with {request.industry}-specific equivalents
+   - Product/service names must be realistic for {request.industry}
+   - Transaction types appropriate to {request.industry}
+   - Reference data catalogs specific to {request.industry}
+
+2. **Country Localization**:
+   - Use Faker library with appropriate locale for {request.country}
+   - Country-specific name generation
+   - Realistic addresses for {request.country}
+   - Correct phone number formats for {request.country}
+   - Appropriate currency codes
+   - Cultural context (holidays, preferences, patterns)
+
+3. **Data Files to Generate**:
+   Based on {request.industry}, create appropriate files:
+   - 1 profile/entity file (customers, subscribers, patients, etc.)
+   - 2-4 transaction files (purchases, bookings, claims, usage, etc.)
+   - 1-2 behavioral/interaction files (web sessions, app events, searches)
+   - 1 calculated metrics file (CLV, churn risk, segments)
+   - Optional: 1-2 reference data files (products, plans, catalog)
+
+4. **Data Volumes**:
+   - {request.profile_count} profile records
+   - {request.months_of_data} months of historical transactions
+   - Total transaction rows should not exceed 1.2M
+   - Distribute volumes realistically based on {request.industry} patterns
+
+5. **Realistic Patterns**:
+   - Transaction frequencies appropriate to {request.industry}
+   - Seasonal variations if relevant
+   - Realistic value distributions
+   - Time-based patterns (weekday/weekend, business hours)
+
+6. **Code Quality**:
+   - Well-structured, readable code
+   - Clear comments explaining industry-specific logic
+   - Helper functions for reusability
+   - Progress output during generation
+   - CSV output with proper headers
+
+## Output Format
+
+Return a JSON object with the following structure:
+
+```json
+{{
+  "files": [
+    {{
+      "path": "generate_data.py",
+      "content": "# Complete Python script here..."
+    }},
+    {{
+      "path": "requirements.txt",
+      "content": "faker==22.0.0\\npython-dateutil==2.8.2\\n"
+    }},
+    {{
+      "path": "README.md",
+      "content": "# Markdown with setup instructions..."
+    }},
+    {{
+      "path": "config_template.env",
+      "content": "# AWS S3 Configuration\\nAWS_ACCESS_KEY_ID=your_key\\n..."
+    }},
+    {{
+      "path": "upload_to_s3.py",
+      "content": "# S3 upload script..."
+    }},
+    {{
+      "path": "upload_to_snowflake.py",
+      "content": "# Snowflake upload script..."
+    }},
+    {{
+      "path": "upload_to_bigquery.py",
+      "content": "# BigQuery upload script..."
+    }}
+  ],
+  "metadata": {{
+    "industry": "{request.industry}",
+    "country": "{request.country}",
+    "profile_count": {request.profile_count},
+    "estimated_total_rows": 123456,
+    "data_files": ["customer_profiles.csv", "transactions.csv", ...]
+  }}
+}}
+```
+
+## Critical Requirements
+
+1. The generate_data.py script MUST be complete and runnable
+2. Use Faker with correct locale for {request.country}
+3. All product/service names must be {request.industry}-specific
+4. Transaction patterns must reflect {request.industry} behavior
+5. Include detailed README.md with setup instructions
+6. Include cloud upload helper scripts (S3, Snowflake, BigQuery)
+7. Return ONLY the JSON object, no markdown formatting around it
+
+Generate the complete package now."""
+
+        # Call Claude API directly for long-form generation
+        async with httpx.AsyncClient(timeout=300.0) as http_client:
+            response = await http_client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": llm_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "claude-opus-4-5-20251101",
+                    "max_tokens": 64000,
+                    "temperature": 0.7,
+                    "system": "You are an expert Python developer and data engineer specializing in generating realistic demo data for any industry. You understand data patterns, industry-specific behaviors, and cultural/geographic variations.",
+                    "messages": [
+                        {"role": "user", "content": generation_prompt}
+                    ],
+                },
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            response_text = data["content"][0]["text"]
+
+            # Parse JSON from response
+            try:
+                # Extract JSON from potential markdown blocks
+                text = response_text.strip()
+                if "```json" in text:
+                    start = text.find("```json") + 7
+                    end = text.find("```", start)
+                    text = text[start:end].strip()
+                elif "```" in text:
+                    start = text.find("```") + 3
+                    end = text.find("```", start)
+                    text = text[start:end].strip()
+
+                # Find JSON object boundaries
+                start_idx = text.find("{")
+                end_idx = text.rfind("}") + 1
+                if start_idx >= 0 and end_idx > start_idx:
+                    text = text[start_idx:end_idx]
+
+                script_data = json.loads(text)
+
+                return {
+                    "success": True,
+                    "files": script_data.get("files", []),
+                    "metadata": script_data.get("metadata", {}),
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to parse generated script: {str(e)}",
+                    "raw_response": response_text[:2000]
+                }
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"LLM API error: {e.response.text}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")
+
+
 # ============================================================================
 # SAVED CONFIGURATIONS
 # ============================================================================
@@ -1641,7 +2099,8 @@ MC_CLIENT_SECRET = os.getenv("MC_CLIENT_SECRET")
 MC_AUTH_BASE_URI = os.getenv("MC_AUTH_BASE_URI")
 MC_REST_BASE_URI = os.getenv("MC_REST_BASE_URI")
 MC_TRIGGERED_SEND_ID = os.getenv("MC_TRIGGERED_SEND_ID")  # Triggered Send Definition External Key
-FEEDBACK_EMAIL_TO = os.getenv("FEEDBACK_EMAIL_TO")  # Where to send notifications
+MC_DE_EXTERNAL_KEY = os.getenv("MC_DE_EXTERNAL_KEY", "D360_Feedback_JB")  # Data Extension for Journey Builder
+FEEDBACK_EMAIL_TO = os.getenv("FEEDBACK_EMAIL_TO", "mnarsana@salesforce.com")  # Default recipient
 
 # SendGrid fallback
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
@@ -1695,8 +2154,89 @@ async def get_mc_access_token() -> Optional[str]:
         return None
 
 
+async def send_feedback_to_de(feedback_entry: dict) -> bool:
+    """Insert feedback record into Data Extension for Journey Builder.
+
+    This is the preferred method - it inserts a row into a Data Extension
+    which can be used as an entry source for a Journey in Journey Builder.
+    """
+    if not MC_REST_BASE_URI or not MC_DE_EXTERNAL_KEY:
+        return False
+
+    token = await get_mc_access_token()
+    if not token:
+        return False
+
+    import uuid
+
+    feedback_type = feedback_entry.get("feedback_type", "general")
+    page_name = feedback_entry.get("page_name", feedback_entry.get("page", "Unknown"))
+    comment = feedback_entry.get("comment", "No comment provided")
+    user_email = feedback_entry.get("email", "Not provided")
+    timestamp = feedback_entry.get("timestamp", datetime.utcnow().isoformat())
+    rating = feedback_entry.get("rating", "")
+
+    # Build subject line based on feedback type
+    if feedback_type == "bug":
+        subject = f"URGENT - BUG REPORTED: {page_name}"
+        priority = "HIGH"
+        feedback_type_label = "BUG"
+    elif feedback_type == "enhancement":
+        subject = f"Enhancement Request: {page_name}"
+        priority = "MEDIUM"
+        feedback_type_label = "ENHANCEMENT"
+    else:
+        subject = f"Feedback: {page_name}"
+        priority = "LOW"
+        feedback_type_label = "FEEDBACK"
+
+    # Generate unique contact key for this feedback entry
+    contact_key = f"feedback_{uuid.uuid4().hex[:12]}"
+
+    # Data Extension row payload
+    de_row = {
+        "keys": {
+            "ContactKey": contact_key
+        },
+        "values": {
+            "ToEmailID": FEEDBACK_EMAIL_TO,
+            "Subject": subject,
+            "FeedbackType": feedback_type_label,
+            "Priority": priority,
+            "PageName": page_name,
+            "Comment": comment[:4000] if comment else "",  # Truncate to field max length
+            "UserEmail": user_email,
+            "Timestamp": timestamp,
+            "Rating": "Positive" if rating == "positive" else "Negative" if rating == "negative" else "N/A",
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # Insert row into Data Extension using REST API
+            # POST /hub/v1/dataevents/key:{externalKey}/rowset
+            response = await client.post(
+                f"{MC_REST_BASE_URI}/hub/v1/dataevents/key:{MC_DE_EXTERNAL_KEY}/rowset",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=[de_row],
+                timeout=15.0,
+            )
+            if response.status_code in (200, 201, 202):
+                print(f"✓ Feedback inserted into DE '{MC_DE_EXTERNAL_KEY}' (ContactKey: {contact_key})")
+                return True
+            else:
+                print(f"DE insert error: {response.status_code} - {response.text}")
+                return False
+    except Exception as e:
+        print(f"DE insert exception: {e}")
+        return False
+
+
 async def send_feedback_via_mc(feedback_entry: dict) -> bool:
-    """Send email notification via Marketing Cloud Triggered Send."""
+    """Send email notification via Marketing Cloud Triggered Send (legacy method)."""
     if not MC_REST_BASE_URI or not MC_TRIGGERED_SEND_ID or not FEEDBACK_EMAIL_TO:
         return False
 
@@ -1861,13 +2401,20 @@ async def send_feedback_via_sendgrid(feedback_entry: dict) -> bool:
 
 
 async def send_feedback_email(feedback_entry: dict):
-    """Send email notification - tries Marketing Cloud first, then SendGrid."""
-    # Try Marketing Cloud first
-    if MC_CLIENT_ID and MC_REST_BASE_URI:
+    """Send email notification - tries MC Data Extension (Journey Builder), then Triggered Send, then SendGrid."""
+    # Try Marketing Cloud Data Extension first (preferred - triggers Journey Builder)
+    if MC_CLIENT_ID and MC_REST_BASE_URI and MC_DE_EXTERNAL_KEY:
+        success = await send_feedback_to_de(feedback_entry)
+        if success:
+            return
+        print("MC Data Extension insert failed, trying Triggered Send...")
+
+    # Try MC Triggered Send (legacy)
+    if MC_CLIENT_ID and MC_REST_BASE_URI and MC_TRIGGERED_SEND_ID:
         success = await send_feedback_via_mc(feedback_entry)
         if success:
             return
-        print("MC failed, trying SendGrid fallback...")
+        print("MC Triggered Send failed, trying SendGrid fallback...")
 
     # Fallback to SendGrid
     if SENDGRID_API_KEY:
